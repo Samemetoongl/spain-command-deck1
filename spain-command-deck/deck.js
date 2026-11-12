@@ -148,6 +148,8 @@ function shortcutPower() {
     status.textContent = message;
     el('powerStatus').textContent = message;
   }
+  const quickCheck = check.cloneNode(true);
+  tile.append(quickCheck);
   el('powerActions').replaceChildren(check);
   updatePowerAge();
 }
@@ -163,12 +165,12 @@ else {
 }
 let weather = '', weatherRequest = 0, controller;
 el('clearWeather').onclick = () => {
-  ++weatherRequest; controller?.abort(); weather = ''; el('weather').textContent = 'Location off';
+  ++weatherRequest; controller?.abort(); weather = ''; data.city = null; save(); el('homeWeather').hidden = true; el('weather').textContent = 'Location off';
   el('forecast').textContent = 'Use approximate coordinates with Open-Meteo for this forecast.';
   el('weatherBtn').disabled = false; el('clearWeather').hidden = true;
 };
-el('weatherBtn').onclick = () => {
-  if (!navigator.geolocation) { el('forecast').textContent = 'Location is unavailable in this browser.'; return; }
+function loadForecast(city) {
+  if (!city && !navigator.geolocation) { el('forecast').textContent = 'Location is unavailable in this browser.'; return; }
   const id = ++weatherRequest;
   weather = ''; el('weather').textContent = 'Locating…'; el('clearWeather').hidden = false;
   el('weatherBtn').disabled = true;
@@ -177,7 +179,7 @@ el('weatherBtn').onclick = () => {
     el('weather').textContent = 'Weather unavailable'; el('forecast').textContent = message;
     el('weatherBtn').disabled = false;
   }
-  navigator.geolocation.getCurrentPosition(async pos => {
+  const receive = async pos => {
     if (id !== weatherRequest) return;
     const query = new URLSearchParams({latitude:pos.coords.latitude.toFixed(1),longitude:pos.coords.longitude.toFixed(1),
       current:'temperature_2m,weather_code',temperature_unit:'fahrenheit',timezone:'UTC'});
@@ -192,13 +194,17 @@ el('weatherBtn').onclick = () => {
       const c = current.weather_code;
       const sky = c === 0 ? 'Clear' : c <= 3 ? 'Cloudy' : c <= 48 ? 'Fog' : c <= 57 ? 'Drizzle' : c <= 67 ? 'Rain' : c <= 77 ? 'Snow' : c <= 82 ? 'Rain showers' : c <= 86 ? 'Snow showers' : 'Thunderstorms';
       weather = Math.round(current.temperature_2m) + '°F · ' + sky;
-      el('weather').textContent = weather;
+      el('weather').textContent = weather; el('homeWeather').hidden = false; el('homeWeather').textContent = (city?.name || 'Local weather') + ' · ' + weather;
       el('forecast').textContent = 'Open-Meteo · ' + dateLabel(new Date(current.time+'Z'));
       el('weatherBtn').disabled = false;
     } catch { failed('Forecast request failed. Try again when online.'); }
     finally { clearTimeout(timer); }
-  }, err => failed(err.code === 1 ? 'Permission denied. You can use the deck without location.' : 'Could not locate this device. Try again.'), {enableHighAccuracy:false,timeout:12000,maximumAge:300000});
+  };
+  if (city) return receive({coords:city});
+  navigator.geolocation.getCurrentPosition(receive, err => failed(err.code === 1 ? 'Permission denied. You can use the deck without location.' : 'Could not locate this device. Try again.'), {enableHighAccuracy:false,timeout:12000,maximumAge:300000});
 };
+el('weatherBtn').onclick = () => loadForecast(null);
+if (data.city) loadForecast(data.city);
 let editing = null, activeFolder = '', organizing = false;
 if (!Array.isArray(data.folders)) data.folders = [];
 function folderPicker(value) {
@@ -267,9 +273,15 @@ function appTile(item, editMode) {
   return a;
 }
 function renderRecent() {
-  const list = data.links.filter(i => i.lastUsed).sort((a,b) => b.lastUsed-a.lastUsed).slice(0,Number(data.recentCount ?? 4));
-  el('recentArea').hidden = !list.length;
-  el('recents').replaceChildren(...list.map(item => appTile(item,false)));
+  const items = data.links.filter(i => i.pinned).map(i => appTile(i,false));
+  for (const name of data.pinnedFolders || []) {
+    if (data.folders.includes(name)) items.push(button('▣ ' + name, () => {activeFolder=name; organizing=false; editor(null); renderLinks(); go('launcher');}));
+  }
+  const visible = items.slice(0,Number(data.recentCount ?? 8));
+  el('recentArea').hidden = !visible.length;
+  el('recents').replaceChildren(...visible);
+  if (typeof renderPins === 'function') renderPins();
+
 }
 function renderLinks() {
   el('confirm').hidden = true;
@@ -297,6 +309,7 @@ function changeFolder(rename) {
     alert('Choose a unique folder name of up to 60 characters.'); return;
   }
   if (rename) {
+    data.pinnedFolders = (data.pinnedFolders || []).map(f => f === activeFolder ? name : f);
     data.folders[data.folders.indexOf(activeFolder)] = name;
     for (const item of data.links) if (item.folder === activeFolder) item.folder = name;
   } else data.folders.push(name);
@@ -307,6 +320,7 @@ el('newFolder').onclick = () => changeFolder(false);
 el('renameFolder').onclick = () => changeFolder(true);
 el('removeFolder').onclick = () => {
   if (!activeFolder || !confirm('Remove this folder and keep its apps in All apps?')) return;
+  data.pinnedFolders = (data.pinnedFolders || []).filter(f => f !== activeFolder);
   data.folders = data.folders.filter(f => f !== activeFolder);
   for (const item of data.links) if (item.folder === activeFolder) item.folder = '';
   activeFolder = ''; save(); editor(null); renderLinks();
@@ -332,7 +346,7 @@ el('linkForm').onsubmit = e => {
   save(); editor(null); renderLinks();
 };
 renderLinks();
-function say(message) {
+function deviceVoice(message) {
   el('reply').textContent = message;
   if (window.speechSynthesis && window.SpeechSynthesisUtterance) {
     speechSynthesis.cancel();
@@ -343,9 +357,7 @@ function say(message) {
 }
 function briefing() {
   el('confirm').hidden = true;
-  const event = nextEvent(), n = count();
-  say('It’s ' + el('clock').textContent + '. ' + n + ' open ' + (n === 1 ? 'task' : 'tasks') + '. ' +
-    (event ? 'Next up: ' + event.name + ', ' + dateLabel(new Date(event.time)) + '. ' : 'No upcoming events. ') + (weather ? 'Weather: ' + weather + '.' : ''));
+  speakBriefing('Morning briefing');
 }
 function command(input) {
   const phrase = input.trim().toLowerCase().replace(/[.!?]+$/,'');

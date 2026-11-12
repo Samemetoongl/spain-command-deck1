@@ -6,7 +6,7 @@ function applyPreferences() {
   dispatchEvent(new CustomEvent('spain-motion', {detail:reduced}));
   renderRecent();
 }
-for (const [id, fallback] of [['coreSize','normal'],['motion','system'],['recentCount','4'],['ownerName','Justin'],['speechRate','1']]) {
+for (const [id, fallback] of [['coreSize','normal'],['motion','system'],['recentCount','8'],['ownerName','Justin'],['speechRate','1']]) {
   el(id).value = data[id] ?? fallback;
   el(id).onchange = () => { data[id] = el(id).value; save(); applyPreferences(); };
 }
@@ -99,11 +99,11 @@ function alarmText(label) {
     new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}) + '. ' +
     (pending.length ? 'You have ' + pending.length + ' open tasks. ' + pending.slice(0,3).map(t => t.text).join('. ') + '. ' : 'Your task list is clear. ') +
     (event ? 'Your next event is ' + event.name + ', ' + dateLabel(new Date(event.time)) + '. ' : '') +
-    (weather ? 'Weather: ' + weather + '. ' : '') + 'Ready when you are.';
+    (weather ? 'Weather: ' + weather + '. ' : '') + ['I checked your schedule. Hiding under the covers is still unofficial.', 'Your pillow has submitted an appeal. I have denied it.', 'Systems online. Coffee remains a manual operation.'][new Date().getDate()%3];
 }
 function stopAlarm() {
   clearInterval(chimeTimer);
-  window.speechSynthesis?.cancel();
+  silenceVoice();
   el('ringing').hidden = true;
   activeAlarm = null;
 }
@@ -115,8 +115,8 @@ function ringAlarm(alarm) {
   el('alarmBriefing').textContent = text;
   el('ringing').hidden = false;
   el('dismissAlarm').focus();
-  chime(); say(text);
-  chimeTimer = setInterval(chime,15000);
+  alarmBeat(); speakBriefing(alarm.label, true);
+  chimeTimer = setInterval(alarmBeat, data.alarmSound === 'soft' ? 4000 : 1600);
 }
 el('armAlarms').onclick = async () => { if (await armAudio()) chime(); };
 el('testAlarm').onclick = async () => { if (await armAudio()) ringAlarm({label:'SPAIN briefing preview'}); };
@@ -157,3 +157,109 @@ document.addEventListener('visibilitychange', () => {
   else { lastAlarmCheck = 0; checkAlarms(); el('alarmStatus').textContent = 'Tap Arm sound after returning to the deck.'; }
 });
 renderAlarms();
+
+function renderPins() {
+  const area = el('pinChoices');
+  area.replaceChildren();
+  function choice(name, selected, update) {
+    const label = document.createElement('label'), input = document.createElement('input');
+    input.type='checkbox'; input.checked=selected; input.style.width='auto';
+    input.onchange=()=>{update(input.checked); save(); renderRecent();};
+    label.append(input, name); area.append(label);
+  }
+  for (const app of data.links) choice(app.name,!!app.pinned,value=>app.pinned=value);
+  for (const folder of data.folders) choice('Folder · '+folder,(data.pinnedFolders || []).includes(folder),value=>{
+    data.pinnedFolders=(data.pinnedFolders || []).filter(f=>f!==folder);
+    if(value) data.pinnedFolders.push(folder);
+  });
+}
+renderPins();
+el('citySearch').onclick=async()=>{
+  const area=el('cityResults'); area.textContent='Searching…';
+  try {
+    const url=new URL('https://geocoding-api.open-meteo.com/v1/search');
+    url.searchParams.set('name',el('cityName').value.trim()); url.searchParams.set('count','5');
+    const res=await fetch(url,{signal:AbortSignal.timeout(10000)});
+    if(!res.ok) throw Error();
+    const cities=(await res.json()).results || [];
+    area.textContent=cities.length?'':'No matches. Try a nearby city.';
+    for(const city of cities) area.append(button([city.name,city.admin1,city.country].filter(Boolean).join(', '),()=>{
+      data.city={name:city.name,latitude:city.latitude,longitude:city.longitude};
+      save(); area.replaceChildren(); loadForecast(data.city);
+    }));
+  } catch {area.textContent='City search unavailable. Try again online.';}
+};
+function httpsAddress(raw) {
+  if (!raw) return '';
+  const url=new URL(raw);
+  if(url.protocol!=='https:' || url.username || url.password || url.search || url.hash) throw Error();
+  return url.href;
+}
+for(const id of ['kokoroUrl','nsUrl']) {
+  el(id).value=data[id] || '';
+  el(id).onchange=()=>{
+    try { data[id]=httpsAddress(el(id).value.trim()); save(); el(id).setCustomValidity(''); }
+    catch {el(id).setCustomValidity('Enter an HTTPS address without credentials or query parameters.');el(id).reportValidity();}
+  };
+}
+let speechGeneration=0, speechAudio, speechRequest;
+function silenceVoice() {
+  speechGeneration++; speechRequest?.abort(); speechAudio?.pause();
+  if(speechAudio?.src) URL.revokeObjectURL(speechAudio.src);
+  speechAudio=null; window.speechSynthesis?.cancel();
+}
+async function say(message) {
+  silenceVoice();
+  const generation=speechGeneration;
+  el('reply').textContent=message;
+  if(!data.kokoroUrl) return deviceVoice(message);
+  const controller=new AbortController();
+  speechRequest=controller;
+  const timer=setTimeout(()=>controller.abort(),15000);
+  try {
+    const response=await fetch(data.kokoroUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:message}),signal:controller.signal,redirect:'error'});
+    if(!response.ok) throw Error();
+    const blob=await response.blob();
+    if(generation!==speechGeneration) return;
+    speechAudio=new Audio(URL.createObjectURL(blob)); speechAudio.playbackRate=Number(data.speechRate)||1;
+    await speechAudio.play(); el('voiceStatus').textContent = 'Using SPAIN voice.';
+  } catch {if(generation===speechGeneration) { el('voiceStatus').textContent='SPAIN voice unreachable. Using the device voice.'; deviceVoice(message); }}
+  finally {clearTimeout(timer);}
+}
+async function glucosePhrase() {
+  if(!data.nsUrl) return '';
+  try {
+    const url=new URL(data.nsUrl.replace(/\/$/,'')+'/api/v1/entries/sgv.json');
+    url.searchParams.set('count','1');
+    if(el('nsToken').value) url.searchParams.set('token',el('nsToken').value.trim());
+    const res=await fetch(url,{cache:'no-store',credentials:'omit',redirect:'error',referrerPolicy:'no-referrer',signal:AbortSignal.timeout(5000)});
+    if(!res.ok) throw Error();
+    const [reading]=await res.json();
+    const age=(Date.now()-reading.date)/60000;
+    if(!Number.isFinite(age)||age<0||!Number.isFinite(reading.sgv)||reading.sgv<39) throw Error();
+    if(age>10) return 'The last glucose reading is stale.';
+    return 'Your sensor read '+reading.sgv+' milligrams per deciliter '+(age<1?'just now':Math.floor(age)+' minutes ago')+'.';
+  } catch {return 'Glucose reading unavailable.';}
+}
+el('nsCheck').onclick=async()=>{el('nsState').textContent=(await glucosePhrase()) || 'Enter your Nightscout address.';};
+async function speakBriefing(label,alarm=false) {
+  silenceVoice();
+  const generation=speechGeneration;
+  const text=alarmText(label)+' '+await glucosePhrase();
+  if(generation!==speechGeneration || (alarm&&!activeAlarm)) return;
+  if(alarm) el('alarmBriefing').textContent=text;
+  say(text.trim());
+}
+el('alarmSound').value=data.alarmSound||'beacon';
+el('alarmSound').onchange=()=>{data.alarmSound=el('alarmSound').value;save();};
+function alarmBeat() {
+  if(data.alarmSound==='soft') return chime();
+  if(audioContext?.state!=='running') return;
+  const notes=data.alarmSound==='rise'?[392,494,587,784]:[480,700,480,700];
+  notes.forEach((hz,i)=>{
+    const start=audioContext.currentTime+i*.35, tone=audioContext.createOscillator(), gain=audioContext.createGain();
+    tone.type='triangle';tone.frequency.value=hz;
+    gain.gain.setValueAtTime(.001,start);gain.gain.linearRampToValueAtTime(.14,start+.035);gain.gain.exponentialRampToValueAtTime(.001,start+.31);
+    tone.connect(gain);gain.connect(audioContext.destination);tone.start(start);tone.stop(start+.33);
+  });
+}
