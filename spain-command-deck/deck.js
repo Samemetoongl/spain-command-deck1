@@ -90,10 +90,57 @@ renderEvents();
 setInterval(() => { if (!document.hidden) tick(); },10000);
 for (const event of ['online','offline','pageshow']) addEventListener(event,tick);
 document.addEventListener('visibilitychange', () => { document.body.classList.toggle('paused',document.hidden); tick(); });
+function shortcutPower() {
+  const current = new URL(location.href);
+  const returned = current.searchParams.get('deckPower') === '1';
+  const onAppleMobile = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (!onAppleMobile && !returned) return;
+
+  let message = '';
+  if (returned) {
+    const raw = (current.searchParams.get('result') || '').trim();
+    const match = /^(\d{1,3})\s*%?$/.exec(raw);
+    if (match && Number(match[1]) <= 100) {
+      data.powerReading = {level:Number(match[1]), time:Date.now()};
+      save();
+    } else {
+      message = 'No percentage returned. End SPAIN Power with Get Battery Level.';
+    }
+    current.searchParams.delete('deckPower');
+    current.searchParams.delete('result');
+    history.replaceState(null, '', current.href);
+  }
+  const check = document.createElement('a');
+  const callback = new URL('index.html', current);
+  callback.searchParams.set('deckPower', '1');
+  const launch = new URL('shortcuts://x-callback-url/run-shortcut');
+  launch.searchParams.set('name', 'SPAIN Power');
+  launch.searchParams.set('x-success', callback.href);
+  check.href = launch.href;
+  check.textContent = 'Check power';
+  check.className = 'destination';
+  const tile = el('powerTile');
+  tile.hidden = false;
+  const reading = data.powerReading;
+  if (reading && Number.isInteger(reading.level) && Number.isFinite(reading.time)) {
+    el('battery').textContent = reading.level + '%';
+    const checked = document.createElement('div');
+    checked.textContent = 'Checked ' + new Date(reading.time).toLocaleString();
+    tile.append(checked);
+  }
+  if (message) {
+    const status = document.createElement('div');
+    status.textContent = message;
+    tile.append(status);
+  }
+  tile.append(check);
+}
 if (navigator.getBattery) navigator.getBattery().then(b => {
   function power() { if (!Number.isFinite(b.level)) return; el('powerTile').hidden = false; el('battery').textContent = Math.round(b.level*100) + '%' + (b.charging ? ' · charging' : ''); }
   power(); b.addEventListener('levelchange',power); b.addEventListener('chargingchange',power);
-}).catch(() => {});
+}).catch(shortcutPower);
+else shortcutPower();
 let weather = '', weatherRequest = 0, controller;
 el('clearWeather').onclick = () => {
   ++weatherRequest; controller?.abort(); weather = ''; el('weather').textContent = 'Location off';
