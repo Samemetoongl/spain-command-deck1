@@ -1,6 +1,7 @@
 'use strict';
 const el = id => document.getElementById(id);
 const key = 'spain-deck-v1';
+let hasLivePower = false;
 const data = {tasks:[], events:[], accent:'#63d9f7'};
 try { Object.assign(data, JSON.parse(localStorage.getItem(key) || '{}')); }
 catch { el('storage').textContent = 'Local storage could not be read.'; }
@@ -14,6 +15,7 @@ const nativeApps = new Map([
   ['shortcuts', 'shortcuts://']
 ]);
 function destination(kind, value) {
+  if (kind === 'internal') return ['settings','alarms'].includes(value) ? '#' + value : null;
   if (kind === 'app') return nativeApps.get(value) || null;
   if (kind === 'shortcut' && value.trim()) return 'shortcuts://run-shortcut?name=' + encodeURIComponent(value.trim());
   if (kind !== 'web') return null;
@@ -30,13 +32,16 @@ if (!Array.isArray(data.links)) {
     ['Routine','shortcut',data.routineName], ['SPAIN','web',data.spainUrl]
   ].filter(item => item[2]).map(([name,kind,value]) => ({name,kind,value}));
 }
+for (const [name,value] of [['SPAIN Settings','settings'],['JARVIS Alarm','alarms']]) {
+  if (!data.links.some(i => i.kind === 'internal' && i.value === value)) data.links.push({name,kind:'internal',value});
+}
 function count() {
   const n = data.tasks.filter(t => !t.done).length;
   el('taskCount').textContent = n + ' open';
   return n;
 }
 function go(view) {
-  for (const id of ['dashboard','agenda','launcher']) el(id).hidden = id !== view;
+  for (const id of ['dashboard','agenda','launcher','settings','alarms']) el(id).hidden = id !== view;
   document.querySelectorAll('nav button').forEach(b => {
     if (b.dataset.go === view) b.setAttribute('aria-current','page');
     else b.removeAttribute('aria-current');
@@ -57,6 +62,7 @@ function tick() {
   const now = new Date();
   el('clock').textContent = now.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
   el('date').textContent = now.toLocaleDateString([], {weekday:'short',month:'long',day:'numeric'});
+  if (typeof updatePowerAge === 'function') updatePowerAge();
   const event = nextEvent();
   el('next').textContent = event?.name || 'No upcoming events';
   el('nextTime').textContent = event ? dateLabel(new Date(event.time)) : 'Add a local calendar entry.';
@@ -133,18 +139,20 @@ function shortcutPower() {
     const checked = document.createElement('div');
     checked.dataset.powerExtra = '';
     checked.textContent = 'Checked ' + new Date(reading.time).toLocaleString();
+    checked.id = 'powerChecked';
     tile.append(checked);
   }
   if (message) {
     const status = document.createElement('div');
     status.dataset.powerExtra = '';
     status.textContent = message;
-    tile.append(status);
+    el('powerStatus').textContent = message;
   }
-  tile.append(check);
+  el('powerActions').replaceChildren(check);
+  updatePowerAge();
 }
 if (navigator.getBattery) navigator.getBattery().then(b => {
-  function power() { if (!Number.isFinite(b.level)) return; el('powerTile').hidden = false; el('battery').textContent = Math.round(b.level*100) + '%' + (b.charging ? ' · charging' : ''); }
+  function power() { if (!Number.isFinite(b.level)) return; hasLivePower = true; el('powerTile').hidden = false; el('powerStatus').textContent = 'Live battery access is active.'; el('battery').textContent = Math.round(b.level*100) + '%' + (b.charging ? ' · charging' : ''); }
   power(); b.addEventListener('levelchange',power); b.addEventListener('chargingchange',power);
 }).catch(shortcutPower);
 else {
@@ -239,8 +247,8 @@ function appTile(item, editMode) {
   const icon = document.createElement('span');
   icon.className = 'appGlyph';
   icon.setAttribute('aria-hidden','true');
-  const icons = {maps:'↗', spotify:'♫', shortcuts:'⌘'};
-  icon.textContent = item.kind === 'app' ? icons[item.value] : '';
+  const icons = {maps:'↗', spotify:'♫', shortcuts:'⌘', settings:'⚙', alarms:'◷'};
+  icon.textContent = ['app','internal'].includes(item.kind) ? icons[item.value] : '';
   if (!icon.textContent) icon.textContent = item.name.trim().slice(0,2).toUpperCase();
   let hue = 0;
   for (const ch of item.name) hue = (hue * 31 + ch.codePointAt(0)) % 360;
@@ -249,12 +257,17 @@ function appTile(item, editMode) {
   label.textContent = item.name;
   a.append(icon,label);
   const href = destination(item.kind,item.value);
+  if (item.kind === 'internal') {
+    a.href = '#' + item.value;
+    a.onclick = e => { e?.preventDefault(); markUsed(item); go(item.value); };
+    return a;
+  }
   if (editMode || !href) a.onclick = () => { editor(item); el('linkName').focus(); };
   else { a.href = href; a.onclick = () => markUsed(item); }
   return a;
 }
 function renderRecent() {
-  const list = data.links.filter(i => i.lastUsed).sort((a,b) => b.lastUsed-a.lastUsed).slice(0,4);
+  const list = data.links.filter(i => i.lastUsed).sort((a,b) => b.lastUsed-a.lastUsed).slice(0,Number(data.recentCount ?? 4));
   el('recentArea').hidden = !list.length;
   el('recents').replaceChildren(...list.map(item => appTile(item,false)));
 }
@@ -323,7 +336,9 @@ function say(message) {
   el('reply').textContent = message;
   if (window.speechSynthesis && window.SpeechSynthesisUtterance) {
     speechSynthesis.cancel();
-    const speech = new SpeechSynthesisUtterance(message); speech.rate = 1; speechSynthesis.speak(speech);
+    const speech = new SpeechSynthesisUtterance(message); speech.rate = Number(data.speechRate) || 1;
+    const voice = speechSynthesis.getVoices().find(v => v.voiceURI === data.voiceURI);
+    if (voice) speech.voice = voice; speechSynthesis.speak(speech);
   }
 }
 function briefing() {
@@ -336,7 +351,7 @@ function command(input) {
   const phrase = input.trim().toLowerCase().replace(/[.!?]+$/,'');
   el('confirm').hidden = true;
   if (['brief me','briefing','give me a briefing'].includes(phrase)) return briefing();
-  const views = {core:'dashboard',dashboard:'dashboard',launcher:'launcher',agenda:'agenda',calendar:'agenda',tasks:'agenda'};
+  const views = {core:'dashboard',dashboard:'dashboard',launcher:'launcher',agenda:'agenda',calendar:'agenda',tasks:'agenda',settings:'settings',alarms:'alarms',alarm:'alarms'};
   const target = phrase.replace(/^(?:go to|show|open) /,'');
   if (Object.hasOwn(views,target)) {
     go(views[target]); if (target === 'tasks') el('tasks').scrollIntoView({block:'center'});
@@ -344,7 +359,7 @@ function command(input) {
   }
   const item = data.links.find(i => phrase === 'open ' + i.name.toLowerCase() || phrase === 'launch ' + i.name.toLowerCase());
   if (item && destination(item.kind,item.value)) {
-    el('confirm').onclick = () => markUsed(item);
+    el('confirm').onclick = e => { markUsed(item); if (item.kind === 'internal') { e.preventDefault(); go(item.value); } };
     el('confirm').href = destination(item.kind,item.value); el('confirm').textContent = 'Open ' + item.name;
     el('confirm').hidden = false; el('reply').textContent = 'Tap below to launch.'; return;
   }
@@ -371,4 +386,26 @@ el('mic').onclick = () => {
 };
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {
   el('storage').textContent = 'Offline shell unavailable in this browser.';
+});
+
+function updatePowerAge() {
+  if (hasLivePower) return;
+  const r = data.powerReading;
+  if (!r || !Number.isFinite(r.time)) return;
+  const mins = Math.max(0, Math.floor((Date.now()-r.time)/60000));
+  const text = mins === 0 ? 'Checked just now' : 'Checked ' + mins + ' min ago';
+  if (el('powerChecked')) el('powerChecked').textContent = text;
+  el('powerStatus').textContent = 'Shortcut reading: ' + r.level + '%. ' + text + (mins >= 5 ? '. Refresh for a current reading.' : '.');
+}
+
+addEventListener('storage', event => {
+  if (event.key !== key || !event.newValue || hasLivePower) return;
+  try {
+    const incoming = JSON.parse(event.newValue).powerReading;
+    if (incoming && Number.isFinite(incoming.time) && incoming.time > (data.powerReading?.time || 0)) {
+      data.powerReading = incoming;
+      el('battery').textContent = incoming.level + '%';
+      updatePowerAge();
+    }
+  } catch {}
 });

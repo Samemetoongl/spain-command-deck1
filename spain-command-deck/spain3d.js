@@ -242,10 +242,11 @@ function resize() {
 new ResizeObserver(resize).observe(container);
 resize();
 
-const reducedMotion = window.matchMedia(
+let reducedMotion = window.matchMedia(
   "(prefers-reduced-motion: reduce)"
-).matches;
+).matches || document.body.classList.contains("reduced");
 
+addEventListener('spain-motion', e => { reducedMotion = e.detail; needsRender = true; });
 let previous = performance.now();
 
 function animate(now) {
