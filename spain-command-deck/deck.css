@@ -1,0 +1,12 @@
+[hidden]{display:none!important}
+body{background:radial-gradient(ellipse at top,#132f40,transparent 46rem),#050a11;color-scheme:dark}
+.app{max-width:720px}.top{align-items:center;padding:12px 0}.tag,small,.core-label,.date{font:600 10px/1.5 ui-monospace,monospace;letter-spacing:.13em;color:var(--accent)}
+h1{font-size:clamp(30px,8vw,48px);letter-spacing:-.055em;margin:4px 0}h2{font-size:30px;letter-spacing:-.03em}h3{margin:8px 0;font-size:19px}.now{font-size:clamp(36px,9vw,62px)}.signal strong{font-size:14px;letter-spacing:0;color:white}
+.core{background:linear-gradient(#21435244 1px,transparent 1px),linear-gradient(90deg,#21435244 1px,transparent 1px);background-size:28px 28px;margin:14px 0;border-block:1px solid var(--line)}
+.core svg{filter:none}#coreBtn{position:absolute;inset:0;margin:auto;width:62%;height:82%;background:transparent;border:0}.core-label{pointer-events:none}
+.duo{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.card{border-radius:14px}.card p,p{color:#a9c4d1;font-size:14px;line-height:1.5}.card h3,.entry strong{overflow-wrap:anywhere}
+button,a#confirm{background:#123449;color:#d1f5ff;border:1px solid #365c70;border-radius:8px;padding:9px 12px;min-height:44px;font:600 14px system-ui;cursor:pointer}
+.console,details,footer{margin-top:18px}.controls,.entry{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.controls{margin-top:12px}.hint{font-size:12px}.entry{margin:10px 0}.entry .destination,.entry div{flex:1;min-width:90px;overflow-wrap:anywhere}.destination,#confirm{color:var(--accent);padding:10px 0;display:inline-block}.entry span{display:block;color:#a9c4d1;font-size:13px}
+label{display:block;color:#c8d9e4;font-size:14px;margin:12px 0 6px}input,select{display:block;width:100%;max-width:100%;box-sizing:border-box;font:16px system-ui;background:#07131e;border:1px solid #31536a;color:white;padding:11px;border-radius:8px;margin-top:5px}.task-entry input,.tasks input{margin:0}.nav{width:min(720px,100%);grid-template-columns:repeat(3,1fr)}.nav button{color:#b4cbd6}.nav button[aria-current]{color:var(--accent);box-shadow:inset 0 2px var(--accent)}
+footer select{width:auto}summary{cursor:pointer;min-height:36px;padding-top:6px}body.paused .turn,body.paused .pulse{animation-play-state:paused}a:focus-visible,summary:focus-visible{outline:2px solid var(--accent)}@media(max-width:359px){.duo{grid-template-columns:1fr}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
