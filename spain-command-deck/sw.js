@@ -1,6 +1,6 @@
 const prefix = 'spain-deck:' + self.registration.scope + ':';
-const version = prefix + '2';
-const shell = ['./','./index.html','./deck.css','./deck.js','./tasks.js','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png'];
+const version = prefix + '3';
+const shell = ['./','./index.html','./deck.css','./deck.js','./tasks.js','./spain3d.js','./three.core.min.js','./three.module.min.js','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png'];
 const paths = new Set(shell.map(path => new URL(path,self.registration.scope).href));
 self.addEventListener('install',event => {
   event.waitUntil(caches.open(version).then(cache => cache.addAll(shell)).then(() => self.skipWaiting()));

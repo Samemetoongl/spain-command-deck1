@@ -8,7 +8,13 @@ function save() {
   try { localStorage.setItem(key, JSON.stringify(data)); }
   catch { el('storage').textContent = 'Storage unavailable. Changes last only for this session.'; }
 }
+const nativeApps = new Map([
+  ['maps', 'maps://'],
+  ['spotify', 'spotify:'],
+  ['shortcuts', 'shortcuts://']
+]);
 function destination(kind, value) {
+  if (kind === 'app') return nativeApps.get(value) || null;
   if (kind === 'shortcut' && value.trim()) return 'shortcuts://run-shortcut?name=' + encodeURIComponent(value.trim());
   if (kind !== 'web') return null;
   try {
@@ -85,7 +91,7 @@ setInterval(() => { if (!document.hidden) tick(); },10000);
 for (const event of ['online','offline','pageshow']) addEventListener(event,tick);
 document.addEventListener('visibilitychange', () => { document.body.classList.toggle('paused',document.hidden); tick(); });
 if (navigator.getBattery) navigator.getBattery().then(b => {
-  function power() { el('battery').textContent = Math.round(b.level*100) + '%' + (b.charging ? ' · charging' : ''); }
+  function power() { if (!Number.isFinite(b.level)) return; el('powerTile').hidden = false; el('battery').textContent = Math.round(b.level*100) + '%' + (b.charging ? ' · charging' : ''); }
   power(); b.addEventListener('levelchange',power); b.addEventListener('chargingchange',power);
 }).catch(() => {});
 let weather = '', weatherRequest = 0, controller;
@@ -133,9 +139,22 @@ function editor(item) {
   el('editorTitle').textContent = item ? 'Edit destination' : 'Add destination';
   el('linkName').value = item?.name || '';
   el('target').value = item?.value || '';
-  el('linkType').value = item?.kind || 'web'; el('linkType').onchange();
+  el('linkType').value = item?.kind || 'app';
+  el('appPreset').value = item?.kind === 'app' ? item.value : 'maps';
+  updateLinkFields();
 }
-el('linkType').onchange = () => { el('targetLabel').textContent = el('linkType').value === 'web' ? 'HTTPS address' : 'Exact Shortcut name'; };
+function updateLinkFields() {
+  const type = el('linkType').value;
+  const preset = type === 'app' && el('appPreset').value !== 'other';
+  el('appChoice').hidden = type !== 'app';
+  el('targetField').hidden = preset;
+  el('target').required = !preset;
+  el('targetLabel').textContent = type === 'web' ? 'HTTPS address' : 'Exact Shortcut name';
+  el('appHelp').hidden = type !== 'app' || preset;
+}
+el('linkType').onchange = updateLinkFields;
+el('appPreset').onchange = updateLinkFields;
+updateLinkFields();
 function renderLinks() {
   el('confirm').hidden = true;
   el('links').replaceChildren();
@@ -152,7 +171,12 @@ function renderLinks() {
 el('cancelLink').onclick = () => editor(null);
 el('linkForm').onsubmit = e => {
   e.preventDefault();
-  const name = el('linkName').value.trim(), kind = el('linkType').value, value = el('target').value.trim();
+  const name = el('linkName').value.trim();
+  let kind = el('linkType').value, value = el('target').value.trim();
+  if (kind === 'app') {
+    if (el('appPreset').value === 'other') kind = 'shortcut';
+    else value = el('appPreset').value;
+  }
   if (!name || data.links.some(i => i !== editing && i.name.toLowerCase() === name.toLowerCase())) { alert('Choose a unique destination name.'); return; }
   if (!destination(kind,value)) { alert('Enter an HTTPS address without embedded credentials, or choose Apple Shortcut.'); return; }
   if (editing) Object.assign(editing,{name,kind,value}); else data.links.push({name,kind,value});
