@@ -191,9 +191,23 @@ el('weatherBtn').onclick = () => {
     finally { clearTimeout(timer); }
   }, err => failed(err.code === 1 ? 'Permission denied. You can use the deck without location.' : 'Could not locate this device. Try again.'), {enableHighAccuracy:false,timeout:12000,maximumAge:300000});
 };
-let editing = null;
+let editing = null, activeFolder = '', organizing = false;
+if (!Array.isArray(data.folders)) data.folders = [];
+function folderPicker(value) {
+  const select = el('linkFolder');
+  select.replaceChildren();
+  for (const name of ['', ...data.folders]) {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name || 'No folder';
+    select.append(opt);
+  }
+  select.value = value || '';
+}
 function editor(item) {
   editing = item;
+  el('removeApp').hidden = !item;
+  folderPicker(item ? item.folder : activeFolder);
   el('editorTitle').parentElement.open = !!item;
   el('editorTitle').textContent = item ? 'Edit destination' : 'Add destination';
   el('linkName').value = item?.name || '';
@@ -214,19 +228,81 @@ function updateLinkFields() {
 el('linkType').onchange = updateLinkFields;
 el('appPreset').onchange = updateLinkFields;
 updateLinkFields();
+function markUsed(item) {
+  item.lastUsed = Math.max(Date.now(), ...data.links.map(link => (link.lastUsed || 0) + 1));
+  save();
+  renderRecent();
+}
+function appTile(item, editMode) {
+  const a = document.createElement(editMode ? 'button' : 'a');
+  a.className = 'appTile';
+  const icon = document.createElement('span');
+  icon.className = 'appGlyph';
+  icon.setAttribute('aria-hidden','true');
+  const icons = {maps:'↗', spotify:'♫', shortcuts:'⌘'};
+  icon.textContent = item.kind === 'app' ? icons[item.value] : '';
+  if (!icon.textContent) icon.textContent = item.name.trim().slice(0,2).toUpperCase();
+  let hue = 0;
+  for (const ch of item.name) hue = (hue * 31 + ch.codePointAt(0)) % 360;
+  icon.style.setProperty('--hue', hue);
+  const label = document.createElement('span');
+  label.textContent = item.name;
+  a.append(icon,label);
+  const href = destination(item.kind,item.value);
+  if (editMode || !href) a.onclick = () => { editor(item); el('linkName').focus(); };
+  else { a.href = href; a.onclick = () => markUsed(item); }
+  return a;
+}
+function renderRecent() {
+  const list = data.links.filter(i => i.lastUsed).sort((a,b) => b.lastUsed-a.lastUsed).slice(0,4);
+  el('recentArea').hidden = !list.length;
+  el('recents').replaceChildren(...list.map(item => appTile(item,false)));
+}
 function renderLinks() {
   el('confirm').hidden = true;
-  el('links').replaceChildren();
-  for (const item of data.links) {
-    const r = row(), a = document.createElement('a'), url = destination(item.kind,item.value);
-    a.className = 'destination'; a.textContent = item.name;
-    if (url) a.href = url; else a.textContent += ' · update address';
-    r.append(a,button('Edit', () => { editor(item); el('linkName').focus(); }),button('Remove', () => {
-      data.links.splice(data.links.indexOf(item),1); editor(null); save(); renderLinks();
-    }));
-    el('links').append(r);
+  el('folders').replaceChildren();
+  for (const name of ['', ...data.folders]) {
+    const tab = button(name || 'All apps', () => { activeFolder = name; editor(null); renderLinks(); });
+    tab.setAttribute('aria-pressed', String(name === activeFolder));
+    el('folders').append(tab);
   }
+  el('folderTools').hidden = !organizing;
+  el('renameFolder').hidden = el('removeFolder').hidden = !activeFolder;
+  el('manageApps').textContent = organizing ? 'Done' : 'Organize';
+  el('manageApps').setAttribute('aria-pressed', String(organizing));
+  const visible = data.links.filter(i => !activeFolder || i.folder === activeFolder);
+  el('links').replaceChildren(...visible.map(item => appTile(item,organizing)));
+  if (!visible.length) el('links').textContent = 'Add an app to this folder.';
+  folderPicker(editing ? editing.folder : activeFolder);
+  renderRecent();
 }
+function changeFolder(rename) {
+  const input = prompt(rename ? 'Rename folder' : 'New folder name', rename ? activeFolder : '');
+  const name = input?.trim();
+  if (!name || (rename && name === activeFolder)) return;
+  if (name.length > 60 || ['All apps', ...data.folders].some(f => f.toLowerCase() === name.toLowerCase())) {
+    alert('Choose a unique folder name of up to 60 characters.'); return;
+  }
+  if (rename) {
+    data.folders[data.folders.indexOf(activeFolder)] = name;
+    for (const item of data.links) if (item.folder === activeFolder) item.folder = name;
+  } else data.folders.push(name);
+  activeFolder = name; save(); editor(null); renderLinks();
+}
+el('manageApps').onclick = () => { organizing = !organizing; editor(null); renderLinks(); };
+el('newFolder').onclick = () => changeFolder(false);
+el('renameFolder').onclick = () => changeFolder(true);
+el('removeFolder').onclick = () => {
+  if (!activeFolder || !confirm('Remove this folder and keep its apps in All apps?')) return;
+  data.folders = data.folders.filter(f => f !== activeFolder);
+  for (const item of data.links) if (item.folder === activeFolder) item.folder = '';
+  activeFolder = ''; save(); editor(null); renderLinks();
+};
+el('removeApp').onclick = () => {
+  if (!editing || !confirm('Remove this app from the deck?')) return;
+  data.links = data.links.filter(item => item !== editing);
+  save(); editor(null); renderLinks();
+};
 el('cancelLink').onclick = () => editor(null);
 el('linkForm').onsubmit = e => {
   e.preventDefault();
@@ -238,7 +314,8 @@ el('linkForm').onsubmit = e => {
   }
   if (!name || data.links.some(i => i !== editing && i.name.toLowerCase() === name.toLowerCase())) { alert('Choose a unique destination name.'); return; }
   if (!destination(kind,value)) { alert('Enter an HTTPS address without embedded credentials, or choose Apple Shortcut.'); return; }
-  if (editing) Object.assign(editing,{name,kind,value}); else data.links.push({name,kind,value});
+  const folder = el('linkFolder').value || '';
+  if (editing) Object.assign(editing,{name,kind,value,folder}); else data.links.push({name,kind,value,folder});
   save(); editor(null); renderLinks();
 };
 renderLinks();
@@ -255,9 +332,6 @@ function briefing() {
   say('It’s ' + el('clock').textContent + '. ' + n + ' open ' + (n === 1 ? 'task' : 'tasks') + '. ' +
     (event ? 'Next up: ' + event.name + ', ' + dateLabel(new Date(event.time)) + '. ' : 'No upcoming events. ') + (weather ? 'Weather: ' + weather + '.' : ''));
 }
-function consoleFocus() {
-  go('dashboard'); el('console').hidden = false; el('console').scrollIntoView({block:'center'}); el('cmd').focus();
-}
 function command(input) {
   const phrase = input.trim().toLowerCase().replace(/[.!?]+$/,'');
   el('confirm').hidden = true;
@@ -270,14 +344,15 @@ function command(input) {
   }
   const item = data.links.find(i => phrase === 'open ' + i.name.toLowerCase() || phrase === 'launch ' + i.name.toLowerCase());
   if (item && destination(item.kind,item.value)) {
+    el('confirm').onclick = () => markUsed(item);
     el('confirm').href = destination(item.kind,item.value); el('confirm').textContent = 'Open ' + item.name;
     el('confirm').hidden = false; el('reply').textContent = 'Tap below to launch.'; return;
   }
   el('reply').textContent = 'Try “brief me”, “show agenda”, “show tasks”, or “open” followed by a saved destination.';
 }
 el('commandForm').onsubmit = e => { e.preventDefault(); command(el('cmd').value); };
-el('coreBtn').onclick = consoleFocus;
-el('closeConsole').onclick = () => { el('console').hidden = true; el('coreBtn').focus(); }; el('briefBtn').onclick = briefing;
+
+el('closeConsole').onclick = () => { el('corePanel').open = false; el('coreBtn').focus(); }; el('briefBtn').onclick = briefing;
 const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 el('voiceHint').textContent = Recognition ? 'Tap to speak once. Your browser may send audio to its speech provider.' : 'Voice recognition unavailable here. Type a command above.';
 el('mic').disabled = !Recognition;

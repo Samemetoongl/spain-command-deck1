@@ -11,7 +11,7 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(
   42, 1, 0.1, 100
 );
-camera.position.z = 12;
+camera.position.z = 9.6;
 
 const renderer = new THREE.WebGLRenderer({
   alpha: true,
@@ -235,6 +235,7 @@ function resize() {
 
   renderer.setSize(width, height, false);
   camera.aspect = width / height;
+  camera.position.z = 9.6 / Math.min(1, camera.aspect);
   camera.updateProjectionMatrix();
 }
 
