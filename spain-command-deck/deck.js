@@ -60,7 +60,8 @@ function tick() {
   const event = nextEvent();
   el('next').textContent = event?.name || 'No upcoming events';
   el('nextTime').textContent = event ? dateLabel(new Date(event.time)) : 'Add a local calendar entry.';
-  el('network').textContent = navigator.onLine ? 'NETWORK ONLINE' : 'OFFLINE';
+  el('network').hidden = navigator.onLine;
+  el('network').textContent = navigator.onLine ? '' : 'OFFLINE';
 }
 function button(label, handler) {
   const b = document.createElement('button');
@@ -92,14 +93,16 @@ for (const event of ['online','offline','pageshow']) addEventListener(event,tick
 document.addEventListener('visibilitychange', () => { document.body.classList.toggle('paused',document.hidden); tick(); });
 function shortcutPower() {
   const current = new URL(location.href);
-  const returned = current.searchParams.get('deckPower') === '1';
+  const hasBatteryFragment = current.hash.startsWith('#battery=');
+  const returned = hasBatteryFragment || current.searchParams.get('deckPower') === '1';
   const onAppleMobile = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   if (!onAppleMobile && !returned) return;
 
   let message = '';
   if (returned) {
-    const raw = (current.searchParams.get('result') || '').trim();
+    const raw = hasBatteryFragment ? new URLSearchParams(current.hash.slice(1)).get('battery').trim() : (current.searchParams.get('result') || '').trim();
+    if (hasBatteryFragment) current.hash = '';
     const match = /^(\d{1,3})\s*%?$/.exec(raw);
     if (match && Number(match[1]) <= 100) {
       data.powerReading = {level:Number(match[1]), time:Date.now()};
@@ -121,16 +124,20 @@ function shortcutPower() {
   check.textContent = 'Check power';
   check.className = 'destination';
   const tile = el('powerTile');
+  tile.querySelectorAll('[data-power-extra]').forEach(node => node.remove());
+  check.dataset.powerExtra = '';
   tile.hidden = false;
   const reading = data.powerReading;
   if (reading && Number.isInteger(reading.level) && Number.isFinite(reading.time)) {
     el('battery').textContent = reading.level + '%';
     const checked = document.createElement('div');
+    checked.dataset.powerExtra = '';
     checked.textContent = 'Checked ' + new Date(reading.time).toLocaleString();
     tile.append(checked);
   }
   if (message) {
     const status = document.createElement('div');
+    status.dataset.powerExtra = '';
     status.textContent = message;
     tile.append(status);
   }
@@ -140,7 +147,12 @@ if (navigator.getBattery) navigator.getBattery().then(b => {
   function power() { if (!Number.isFinite(b.level)) return; el('powerTile').hidden = false; el('battery').textContent = Math.round(b.level*100) + '%' + (b.charging ? ' · charging' : ''); }
   power(); b.addEventListener('levelchange',power); b.addEventListener('chargingchange',power);
 }).catch(shortcutPower);
-else shortcutPower();
+else {
+  shortcutPower();
+  addEventListener('hashchange', () => {
+    if (location.hash.startsWith('#battery=')) shortcutPower();
+  });
+}
 let weather = '', weatherRequest = 0, controller;
 el('clearWeather').onclick = () => {
   ++weatherRequest; controller?.abort(); weather = ''; el('weather').textContent = 'Location off';
@@ -244,13 +256,13 @@ function briefing() {
     (event ? 'Next up: ' + event.name + ', ' + dateLabel(new Date(event.time)) + '. ' : 'No upcoming events. ') + (weather ? 'Weather: ' + weather + '.' : ''));
 }
 function consoleFocus() {
-  go('dashboard'); el('console').scrollIntoView({block:'center'}); el('cmd').focus();
+  go('dashboard'); el('console').hidden = false; el('console').scrollIntoView({block:'center'}); el('cmd').focus();
 }
 function command(input) {
   const phrase = input.trim().toLowerCase().replace(/[.!?]+$/,'');
   el('confirm').hidden = true;
   if (['brief me','briefing','give me a briefing'].includes(phrase)) return briefing();
-  const views = {core:'dashboard',dashboard:'dashboard',launcher:'launcher',agenda:'agenda',calendar:'agenda',tasks:'dashboard'};
+  const views = {core:'dashboard',dashboard:'dashboard',launcher:'launcher',agenda:'agenda',calendar:'agenda',tasks:'agenda'};
   const target = phrase.replace(/^(?:go to|show|open) /,'');
   if (Object.hasOwn(views,target)) {
     go(views[target]); if (target === 'tasks') el('tasks').scrollIntoView({block:'center'});
@@ -264,7 +276,8 @@ function command(input) {
   el('reply').textContent = 'Try “brief me”, “show agenda”, “show tasks”, or “open” followed by a saved destination.';
 }
 el('commandForm').onsubmit = e => { e.preventDefault(); command(el('cmd').value); };
-el('coreBtn').onclick = consoleFocus; el('briefBtn').onclick = briefing;
+el('coreBtn').onclick = consoleFocus;
+el('closeConsole').onclick = () => { el('console').hidden = true; el('coreBtn').focus(); }; el('briefBtn').onclick = briefing;
 const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 el('voiceHint').textContent = Recognition ? 'Tap to speak once. Your browser may send audio to its speech provider.' : 'Voice recognition unavailable here. Type a command above.';
 el('mic').disabled = !Recognition;
