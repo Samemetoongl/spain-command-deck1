@@ -1,0 +1,281 @@
+[hidden]{display:none!important}
+body{background:radial-gradient(ellipse at top,#132f40,transparent 46rem),#050a11;color-scheme:dark}
+.app{max-width:720px}.top{align-items:center;padding:12px 0}.tag,small,.core-label,.date{font:600 10px/1.5 ui-monospace,monospace;letter-spacing:.13em;color:var(--accent)}
+h1{font-size:clamp(30px,8vw,48px);letter-spacing:-.055em;margin:4px 0}h2{font-size:30px;letter-spacing:-.03em}h3{margin:8px 0;font-size:19px}.now{font-size:clamp(36px,9vw,62px)}.signal strong{font-size:14px;letter-spacing:0;color:white}
+.core{background:linear-gradient(#21435244 1px,transparent 1px),linear-gradient(90deg,#21435244 1px,transparent 1px);background-size:28px 28px;margin:14px 0;border-block:1px solid var(--line)}
+.core svg{filter:none}#coreBtn{position:absolute;inset:0;margin:auto;width:62%;height:82%;background:transparent;border:0}.core-label{pointer-events:none}
+.duo{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.card{border-radius:14px}.card p,p{color:#a9c4d1;font-size:14px;line-height:1.5}.card h3,.entry strong{overflow-wrap:anywhere}
+button,a#confirm{background:#123449;color:#d1f5ff;border:1px solid #365c70;border-radius:8px;padding:9px 12px;min-height:44px;font:600 14px system-ui;cursor:pointer}
+.console,details,footer{margin-top:18px}.controls,.entry{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.controls{margin-top:12px}.hint{font-size:12px}.entry{margin:10px 0}.entry .destination,.entry div{flex:1;min-width:90px;overflow-wrap:anywhere}.destination,#confirm{color:var(--accent);padding:10px 0;display:inline-block}.entry span{display:block;color:#a9c4d1;font-size:13px}
+label{display:block;color:#c8d9e4;font-size:14px;margin:12px 0 6px}input,select{display:block;width:100%;max-width:100%;box-sizing:border-box;font:16px system-ui;background:#07131e;border:1px solid #31536a;color:white;padding:11px;border-radius:8px;margin-top:5px}.task-entry input,.tasks input{margin:0}.nav{width:min(720px,100%);grid-template-columns:repeat(3,1fr)}.nav button{color:#b4cbd6}.nav button[aria-current]{color:var(--accent);box-shadow:inset 0 2px var(--accent)}
+footer select{width:auto}summary{cursor:pointer;min-height:36px;padding-top:6px}body.paused .turn,body.paused .pulse{animation-play-state:paused}a:focus-visible,summary:focus-visible{outline:2px solid var(--accent)}@media(max-width:359px){.duo{grid-template-columns:1fr}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+'use strict';
+const el = id => document.getElementById(id);
+const key = 'spain-deck-v1';
+const data = {tasks:[], events:[], accent:'#63d9f7'};
+try { Object.assign(data, JSON.parse(localStorage.getItem(key) || '{}')); }
+catch { el('storage').textContent = 'Local storage could not be read.'; }
+function save() {
+  try { localStorage.setItem(key, JSON.stringify(data)); }
+  catch { el('storage').textContent = 'Storage unavailable. Changes last only for this session.'; }
+}
+function destination(kind, value) {
+  if (kind === 'shortcut' && value.trim()) return 'shortcuts://run-shortcut?name=' + encodeURIComponent(value.trim());
+  if (kind !== 'web') return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol === 'https:' && !url.username && !url.password) return url.href;
+  } catch {}
+  return null;
+}
+if (!Array.isArray(data.links)) {
+  data.links = [
+    ['ChatGPT','web',data.chatUrl || 'https://chatgpt.com/'],
+    ['Zoho Mail','web',data.mailUrl || 'https://mail.zoho.com/'],
+    ['Routine','shortcut',data.routineName], ['SPAIN','web',data.spainUrl]
+  ].filter(item => item[2]).map(([name,kind,value]) => ({name,kind,value}));
+}
+function count() {
+  const n = data.tasks.filter(t => !t.done).length;
+  el('taskCount').textContent = n + ' open';
+  return n;
+}
+function go(view) {
+  for (const id of ['dashboard','agenda','launcher']) el(id).hidden = id !== view;
+  document.querySelectorAll('nav button').forEach(b => {
+    if (b.dataset.go === view) b.setAttribute('aria-current','page');
+    else b.removeAttribute('aria-current');
+  });
+  window.scrollTo(0,0);
+}
+document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
+go('dashboard');
+function updateAccent() {
+  el('accent').value = data.accent;
+  if (el('accent').value) document.documentElement.style.setProperty('--accent', data.accent);
+}
+updateAccent();
+el('accent').onchange = () => { data.accent = el('accent').value; save(); updateAccent(); };
+const dateLabel = date => date.toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+function nextEvent() { return data.events.find(e => e.time >= Date.now()); }
+function tick() {
+  const now = new Date();
+  el('clock').textContent = now.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  el('date').textContent = now.toLocaleDateString([], {weekday:'short',month:'long',day:'numeric'});
+  const event = nextEvent();
+  el('next').textContent = event?.name || 'No upcoming events';
+  el('nextTime').textContent = event ? dateLabel(new Date(event.time)) : 'Add a local calendar entry.';
+  el('network').textContent = navigator.onLine ? 'NETWORK ONLINE' : 'OFFLINE';
+}
+function button(label, handler) {
+  const b = document.createElement('button');
+  b.textContent = label; b.onclick = handler; return b;
+}
+function row() {
+  const r = document.createElement('div'); r.className = 'card entry'; return r;
+}
+function renderEvents() {
+  data.events.sort((a,b) => a.time - b.time);
+  el('events').replaceChildren();
+  for (const event of data.events) {
+    const r = row(), info = document.createElement('div'), when = document.createElement('span');
+    info.textContent = event.name; when.textContent = dateLabel(new Date(event.time)); info.append(when);
+    r.append(info, button('Remove', () => { data.events.splice(data.events.indexOf(event),1); save(); renderEvents(); }));
+    el('events').append(r);
+  }
+  tick();
+}
+el('eventForm').onsubmit = e => {
+  e.preventDefault();
+  const name = el('eventName').value.trim(), time = new Date(el('eventWhen').value).getTime();
+  if (!name || !Number.isFinite(time)) return;
+  data.events.push({name,time}); save(); e.target.reset(); renderEvents();
+};
+renderEvents();
+setInterval(() => { if (!document.hidden) tick(); },10000);
+for (const event of ['online','offline','pageshow']) addEventListener(event,tick);
+document.addEventListener('visibilitychange', () => { document.body.classList.toggle('paused',document.hidden); tick(); });
+if (navigator.getBattery) navigator.getBattery().then(b => {
+  function power() { el('battery').textContent = Math.round(b.level*100) + '%' + (b.charging ? ' · charging' : ''); }
+  power(); b.addEventListener('levelchange',power); b.addEventListener('chargingchange',power);
+}).catch(() => {});
+let weather = '', weatherRequest = 0, controller;
+el('clearWeather').onclick = () => {
+  ++weatherRequest; controller?.abort(); weather = ''; el('weather').textContent = 'Location off';
+  el('forecast').textContent = 'Use approximate coordinates with Open-Meteo for this forecast.';
+  el('weatherBtn').disabled = false; el('clearWeather').hidden = true;
+};
+el('weatherBtn').onclick = () => {
+  if (!navigator.geolocation) { el('forecast').textContent = 'Location is unavailable in this browser.'; return; }
+  const id = ++weatherRequest;
+  weather = ''; el('weather').textContent = 'Locating…'; el('clearWeather').hidden = false;
+  el('weatherBtn').disabled = true;
+  function failed(message) {
+    if (id !== weatherRequest) return;
+    el('weather').textContent = 'Weather unavailable'; el('forecast').textContent = message;
+    el('weatherBtn').disabled = false;
+  }
+  navigator.geolocation.getCurrentPosition(async pos => {
+    if (id !== weatherRequest) return;
+    const query = new URLSearchParams({latitude:pos.coords.latitude.toFixed(1),longitude:pos.coords.longitude.toFixed(1),
+      current:'temperature_2m,weather_code',temperature_unit:'fahrenheit',timezone:'UTC'});
+    controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(),12000);
+    try {
+      const res = await fetch('https://api.open-meteo.com/v1/forecast?' + query,{signal:controller.signal,credentials:'omit',referrerPolicy:'no-referrer',cache:'no-store'});
+      if (!res.ok) throw Error();
+      const {current} = await res.json();
+      if (!Number.isFinite(current?.temperature_2m)) throw Error();
+      if (id !== weatherRequest) return;
+      const c = current.weather_code;
+      const sky = c === 0 ? 'Clear' : c <= 3 ? 'Cloudy' : c <= 48 ? 'Fog' : c <= 57 ? 'Drizzle' : c <= 67 ? 'Rain' : c <= 77 ? 'Snow' : c <= 82 ? 'Rain showers' : c <= 86 ? 'Snow showers' : 'Thunderstorms';
+      weather = Math.round(current.temperature_2m) + '°F · ' + sky;
+      el('weather').textContent = weather;
+      el('forecast').textContent = 'Open-Meteo · ' + dateLabel(new Date(current.time+'Z'));
+      el('weatherBtn').disabled = false;
+    } catch { failed('Forecast request failed. Try again when online.'); }
+    finally { clearTimeout(timer); }
+  }, err => failed(err.code === 1 ? 'Permission denied. You can use the deck without location.' : 'Could not locate this device. Try again.'), {enableHighAccuracy:false,timeout:12000,maximumAge:300000});
+};
+let editing = null;
+function editor(item) {
+  editing = item;
+  el('editorTitle').parentElement.open = !!item;
+  el('editorTitle').textContent = item ? 'Edit destination' : 'Add destination';
+  el('linkName').value = item?.name || '';
+  el('target').value = item?.value || '';
+  el('linkType').value = item?.kind || 'web'; el('linkType').onchange();
+}
+el('linkType').onchange = () => { el('targetLabel').textContent = el('linkType').value === 'web' ? 'HTTPS address' : 'Exact Shortcut name'; };
+function renderLinks() {
+  el('confirm').hidden = true;
+  el('links').replaceChildren();
+  for (const item of data.links) {
+    const r = row(), a = document.createElement('a'), url = destination(item.kind,item.value);
+    a.className = 'destination'; a.textContent = item.name;
+    if (url) a.href = url; else a.textContent += ' · update address';
+    r.append(a,button('Edit', () => { editor(item); el('linkName').focus(); }),button('Remove', () => {
+      data.links.splice(data.links.indexOf(item),1); editor(null); save(); renderLinks();
+    }));
+    el('links').append(r);
+  }
+}
+el('cancelLink').onclick = () => editor(null);
+el('linkForm').onsubmit = e => {
+  e.preventDefault();
+  const name = el('linkName').value.trim(), kind = el('linkType').value, value = el('target').value.trim();
+  if (!name || data.links.some(i => i !== editing && i.name.toLowerCase() === name.toLowerCase())) { alert('Choose a unique destination name.'); return; }
+  if (!destination(kind,value)) { alert('Enter an HTTPS address without embedded credentials, or choose Apple Shortcut.'); return; }
+  if (editing) Object.assign(editing,{name,kind,value}); else data.links.push({name,kind,value});
+  save(); editor(null); renderLinks();
+};
+renderLinks();
+function say(message) {
+  el('reply').textContent = message;
+  if (window.speechSynthesis && window.SpeechSynthesisUtterance) {
+    speechSynthesis.cancel();
+    const speech = new SpeechSynthesisUtterance(message); speech.rate = 1; speechSynthesis.speak(speech);
+  }
+}
+function briefing() {
+  el('confirm').hidden = true;
+  const event = nextEvent(), n = count();
+  say('It’s ' + el('clock').textContent + '. ' + n + ' open ' + (n === 1 ? 'task' : 'tasks') + '. ' +
+    (event ? 'Next up: ' + event.name + ', ' + dateLabel(new Date(event.time)) + '. ' : 'No upcoming events. ') + (weather ? 'Weather: ' + weather + '.' : ''));
+}
+function consoleFocus() {
+  go('dashboard'); el('console').scrollIntoView({block:'center'}); el('cmd').focus();
+}
+function command(input) {
+  const phrase = input.trim().toLowerCase().replace(/[.!?]+$/,'');
+  el('confirm').hidden = true;
+  if (['brief me','briefing','give me a briefing'].includes(phrase)) return briefing();
+  const views = {core:'dashboard',dashboard:'dashboard',launcher:'launcher',agenda:'agenda',calendar:'agenda',tasks:'dashboard'};
+  const target = phrase.replace(/^(?:go to|show|open) /,'');
+  if (Object.hasOwn(views,target)) {
+    go(views[target]); if (target === 'tasks') el('tasks').scrollIntoView({block:'center'});
+    el('reply').textContent = 'Opened ' + target + '.'; return;
+  }
+  const item = data.links.find(i => phrase === 'open ' + i.name.toLowerCase() || phrase === 'launch ' + i.name.toLowerCase());
+  if (item && destination(item.kind,item.value)) {
+    el('confirm').href = destination(item.kind,item.value); el('confirm').textContent = 'Open ' + item.name;
+    el('confirm').hidden = false; el('reply').textContent = 'Tap below to launch.'; return;
+  }
+  el('reply').textContent = 'Try “brief me”, “show agenda”, “show tasks”, or “open” followed by a saved destination.';
+}
+el('commandForm').onsubmit = e => { e.preventDefault(); command(el('cmd').value); };
+el('coreBtn').onclick = consoleFocus; el('briefBtn').onclick = briefing;
+const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+el('voiceHint').textContent = Recognition ? 'Tap to speak once. Your browser may send audio to its speech provider.' : 'Voice recognition unavailable here. Type a command above.';
+el('mic').disabled = !Recognition;
+let activeRecognition;
+el('mic').onclick = () => {<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#060d16"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="SPAIN Deck">
+<link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icons/icon-192.png"><title>SPAIN // Command Deck</title>
+<style>
+:root {--bg:#050a11;--panel:#0c1825;--panel2:#0f2130;--line:#23475b;--ink:#eef8ff;--muted:#7394a7;--accent:#63d9f7;--accent-low:#145979;--warn:#f0b65a;--radius:18px;}
+*{box-sizing:border-box}html{background:var(--bg)}body{margin:0;color:var(--ink);background:radial-gradient(ellipse at 48% 23%,#1233499c 0%,#071320 34%,#050a11 75%);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100dvh;letter-spacing:.015em;overflow-x:hidden}
+body:before{content:"";position:fixed;inset:0;background:linear-gradient(transparent 49%,#76d6ef05 50%);background-size:100% 5px;pointer-events:none;z-index:4}
+button,input{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:3px}button:active{transform:scale(.97)}
+.app{max-width:580px;margin:auto;padding:calc(env(safe-area-inset-top) + 20px) 18px calc(env(safe-area-inset-bottom) + 100px);min-height:100dvh;}
+.top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}.eyebrow{font-size:10px;font-weight:700;letter-spacing:.3em;color:var(--accent)}h1{font-size:21px;margin:8px 0 2px;font-weight:650;letter-spacing:.14em}.sub{font-size:11px;color:var(--muted);letter-spacing:.06em}.top-actions{display:flex;gap:8px}.square{background:var(--panel);border:1px solid var(--line);width:38px;height:38px;border-radius:11px;color:var(--accent);display:grid;place-items:center;font-size:20px}
+.telemetry{display:flex;justify-content:space-between;align-items:center;margin-top:22px;padding:12px 14px;border:1px solid #28536b;background:#0b1c29bb;border-radius:13px}.now{font-size:37px;font-weight:300;letter-spacing:-.04em;font-variant-numeric:tabular-nums}.date{font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}.signal{font-size:9px;letter-spacing:.16em;color:var(--accent);text-align:right;line-height:1.9}.led{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent);margin-right:6px}
+.core{height:265px;display:grid;place-items:center;position:relative;isolation:isolate}.core:before{content:"";position:absolute;inset:25px 8%;background:radial-gradient(circle,#28b9e91a,transparent 62%);filter:blur(18px);z-index:-1}.core svg{height:245px;width:245px;overflow:visible;filter:drop-shadow(0 0 12px #0dcdfa33)}.turn{transform-origin:50% 50%;animation:spin 35s linear infinite}.reverse{animation-direction:reverse;animation-duration:48s}.pulse{animation:pulse 3s ease-in-out infinite}@keyframes spin{to{transform:rotate(360deg)}}@keyframes pulse{50%{opacity:.55}}@media(prefers-reduced-motion:reduce){.turn,.pulse{animation:none}}
+.core-label{position:absolute;bottom:5px;left:0;right:0;text-align:center;font-size:10px;letter-spacing:.3em;color:var(--accent)}
+.section-heading{display:flex;justify-content:space-between;align-items:center;margin:23px 0 10px}.section-heading strong{font-size:11px;letter-spacing:.22em}.section-heading span{font-size:10px;color:var(--muted);letter-spacing:.12em}
+.actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.tile{background:linear-gradient(145deg,#102536,#0a1621);border:1px solid #2a576a;border-radius:15px;padding:14px 13px;text-align:left;color:var(--ink);display:flex;flex-direction:column;gap:8px;min-height:100px;box-shadow:inset 0 1px 0 #c4effd0b}.tile .glyph{font-size:24px;color:var(--accent);line-height:1}.tile b{font-size:12px;letter-spacing:.15em}.tile small{font-size:10px;color:#88a9ba}
+.card{background:linear-gradient(150deg,#102536,#081520);border:1px solid var(--line);border-radius:var(--radius);padding:15px}.brief{display:flex;justify-content:space-between;gap:14px;align-items:center}.brief p{font-size:12px;color:#b9d3e0;line-height:1.5;margin:6px 0 0}.cta{background:#164965;border:1px solid #368db1;color:#bdf2ff;border-radius:12px;padding:10px 13px;white-space:nowrap;font-weight:650;font-size:11px;letter-spacing:.12em}
+.tasks{list-style:none;padding:0;margin:0}.tasks li{display:flex;gap:10px;align-items:center;border-bottom:1px solid #1c3a4b;padding:11px 0;min-height:42px}.tasks li:last-child{border-bottom:0}.tasks input[type=checkbox]{accent-color:var(--accent);width:18px;height:18px}.tasks .taskname{flex:1;font-size:13px}.tasks .done{text-decoration:line-through;color:var(--muted)}.remove{background:transparent;border:0;color:#819caf;font-size:20px;padding:0 6px}.task-entry{display:flex;gap:8px;margin-top:13px}.task-entry input,.field input{flex:1;min-width:0;border:1px solid #31536a;background:#07131e;color:#fff;padding:11px;border-radius:10px;outline:none}.task-entry button{background:var(--accent-low);color:#fff;border:1px solid #247ca2;border-radius:10px;padding:0 16px}.empty{color:var(--muted);font-size:12px;padding:10px 0}
+.nav{position:fixed;z-index:5;bottom:0;left:50%;transform:translateX(-50%);width:min(580px,100%);background:#06111df0;backdrop-filter:blur(20px);border-top:1px solid #244b62;display:grid;grid-template-columns:repeat(3,1fr);padding:9px 8px calc(env(safe-area-inset-bottom) + 11px);gap:8px}.nav button{border:0;background:transparent;color:#8faabc;padding:6px;border-radius:9px;font-size:10px;letter-spacing:.14em}.nav button.active{color:var(--accent);background:#153649}.nav span{display:block;font-size:22px;margin-bottom:2px}
+.overlay{position:fixed;inset:0;z-index:10;background:#02070bc7;display:none;align-items:flex-end;justify-content:center}.overlay.open{display:flex}.sheet{width:min(580px,100%);max-height:85dvh;overflow:auto;background:#0b1926;border:1px solid #3a6276;border-radius:22px 22px 0 0;padding:25px 20px calc(env(safe-area-inset-bottom) + 25px)}.sheet h2{font-size:16px;letter-spacing:.13em;margin:0 0 8px}.sheet p{font-size:12px;color:#8fb0bf;line-height:1.5}.field{display:grid;gap:7px;margin:16px 0}.field label{font-size:10px;color:var(--accent);letter-spacing:.17em}.field input{width:100%}.colors{display:flex;gap:12px;margin:14px 0}.swatch{width:35px;height:35px;border-radius:50%;border:2px solid #ffffff88}.swatch.selected{outline:2px solid white;outline-offset:3px}.rowbtn{display:flex;gap:8px;margin-top:18px}.rowbtn button{flex:1;padding:12px;border-radius:10px;border:1px solid #42748a;background:#16445b;color:#fff}.rowbtn button.ghost{background:transparent}.notice{font-size:11px;color:#e9bd74}.hide{display:none!important}.footer{margin-top:20px;text-align:center;color:#456b81;font-size:9px;letter-spacing:.15em}
+</style>
+<link rel="stylesheet" href="deck.css"></head><body>
+<main class="app"><header class="top"><div><div class="eyebrow">S.P.A.I.N.</div><h1>Command Deck</h1></div><div class="tag" id="network"></div></header>
+<section id="dashboard"><div class="telemetry"><div><div id="date" class="date"></div><div class="now" id="clock"></div></div><div class="signal"><div>DEVICE POWER</div><strong id="battery">Unavailable</strong></div></div>
+<section class="core" aria-label="SPAIN core visualization"><svg viewBox="0 0 260 260" role="img" aria-label="Animated concentric reactor rings"><defs><radialGradient id="halo"><stop offset="0" stop-color="#19daf9" stop-opacity=".38"/><stop offset="1" stop-color="#19daf9" stop-opacity="0"/></radialGradient></defs><circle cx="130" cy="130" r="125" fill="url(#halo)"/><circle class="turn" cx="130" cy="130" r="100" fill="none" stroke="#28546a" stroke-width="2" stroke-dasharray="60 11 3 11 10 11"/><circle class="reverse turn" cx="130" cy="130" r="89" fill="none" stroke="var(--accent)" stroke-opacity=".82" stroke-width="3" stroke-dasharray="64 25 3 25"/><circle cx="130" cy="130" r="77" fill="none" stroke="#205269" stroke-width="1"/><circle class="turn" cx="130" cy="130" r="69" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-opacity=".8" stroke-dasharray="4 8"/><circle cx="130" cy="130" r="56" fill="none" stroke="#2c82a7" stroke-width="2"/><circle cx="130" cy="130" r="45" fill="#092335" stroke="var(--accent)" stroke-width="2"/><circle class="pulse" cx="130" cy="130" r="29" fill="#093952" stroke="#9befff" stroke-width="2"/><path d="M118 109 L148 130 L118 151Z" fill="none" stroke="#b8f4ff" stroke-width="3"/><path d="M130 0V20 M130 240V260 M0 130H20 M240 130H260" stroke="var(--accent)" stroke-width="1.5"/></svg><button id="coreBtn" aria-label="Open command console"></button><div class="core-label">OPEN COMMAND CONSOLE</div></section>
+
+<div class="duo"><article class="card"><small>LOCAL WEATHER</small><h3 id="weather">Location off</h3><p id="forecast">Use approximate coordinates with Open-Meteo for this forecast.</p><button id="weatherBtn">Get weather</button><button hidden id="clearWeather">Clear</button></article>
+<article class="card"><small>NEXT EVENT</small><h3 id="next">No upcoming events</h3><p id="nextTime"></p><button data-go="agenda">View agenda</button></article></div>
+<section class="card console" id="console"><small>COMMAND CONSOLE</small><form id="commandForm"><label for="cmd">Enter a command</label><div class="task-entry"><input id="cmd" placeholder="Open Zoho Mail" maxlength="160" required><button>Run</button></div></form><div class="controls"><button id="mic">Use microphone</button><button id="briefBtn">Brief me</button></div><p class="hint" id="voiceHint"></p><p id="reply" role="status"></p><a id="confirm" hidden></a></section>
+<div class="section-heading"><strong>OPERATIONS QUEUE</strong><span><span id="taskCount"></span></span></div><section class="card"><ul class="tasks" id="tasks"></ul><form class="task-entry" id="taskForm"><input id="taskInput" maxlength="100" placeholder="Add a task…" aria-label="New task" required><button type="submit">ADD</button></form></section>
+</section>
+<section id="launcher" hidden><h2>Launcher</h2><p>Tap a destination to open it.</p><div id="links"></div>
+<details class="card"><summary id="editorTitle">Add destination</summary><form id="linkForm"><label>Name<input id="linkName" maxlength="60" required></label><label>Type<select id="linkType"><option value="web">Website or universal app link</option><option value="shortcut">Apple Shortcut</option></select></label><label><span id="targetLabel">HTTPS address</span><input id="target" required maxlength="2000"></label><p>For any installed app, create an Open App shortcut in Shortcuts and enter its exact name here. iOS may ask before opening it.</p><button>Save destination</button><button type="button" id="cancelLink">Cancel</button></form></details></section>
+<section id="agenda" hidden><h2>Agenda</h2><p>Entries stay in this browser. The deck cannot read your iPhone calendar directly.</p><div id="events"></div><form class="card" id="eventForm"><label>Event name<input id="eventName" required maxlength="100"></label><label>Local date and time<input id="eventWhen" type="datetime-local" required></label><button>Add event</button></form></section>
+<footer><label>Core accent <select id="accenconst prefix = 'spain-deck:' + self.registration.scope + ':';
+const version = prefix + '2';
+const shell = ['./','./index.html','./deck.css','./deck.js','./tasks.js','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png'];
+const paths = new Set(shell.map(path => new URL(path,self.registration.scope).href));
+self.addEventListener('install',event => {
+  event.waitUntil(caches.open(version).then(cache => cache.addAll(shell)).then(() => self.skipWaiting()));
+});
+self.addEventListener('activate',event => {
+  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith(prefix) && k !== version).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+});
+self.addEventListener('fetch',event => {
+  if (event.request.method !== 'GET' |function renderTasks(){el('tasks').replaceChildren();if(!data.tasks.length){let x=document.createElement('div');x.className='empty';x.textContent='No tasks yet. Add your first operation below.';el('tasks').append(x)}data.tasks.forEach((task,i)=>{const li=document.createElement('li'),c=document.createElement('input'),txt=document.createElement('span'),b=document.createElement('button');c.type='checkbox';c.checked=!!task.done;c.setAttribute('aria-label','Complete '+task.text);c.onchange=()=>{data.tasks[i].done=c.checked;save();renderTasks()};txt.className='taskname'+(task.done?' done':'');txt.textContent=task.text;b.className='remove';b.textContent='×';b.setAttribute('aria-label','Remove task');b.onclick=()=>{data.tasks.splice(i,1);save();renderTasks()};li.append(c,txt,b);el('tasks').append(li)});count()};renderTasks();
+el('taskForm').onsubmit=e=>{e.preventDefault();let v=el('taskInput').value.trim();if(!v)return;data.tasks.unshift({text:v.slice(0,100),done:false});el('taskInput').value='';save();renderTasks()};
+| !paths.has(event.request.url)) return;
+  event.respondWith(caches.open(version).then(async cache => (await cache.match(event.request)) || fetch(event.request)));
+});
+t"><option value="#63d9f7">Ice blue</option><option value="#a993ff">Violet</option><option value="#ffb964">Amber</option></select></label><p id="storage" role="status"></p></footer></main>
+<nav class="nav" aria-label="Deck views"><button data-go="dashboard">Core</button><button data-go="launcher">Launcher</button><button data-go="agenda">Agenda</button></nav>
+<script defer src="deck.js"></script><script defer src="tasks.js"></script></body></html>
+  if (activeRecognition) { activeRecognition.abort(); return; }
+  window.speechSynthesis?.cancel(); el('confirm').hidden = true;
+  try {
+    const rec = new Recognition(); activeRecognition = rec;
+    rec.lang = navigator.language; rec.continuous = false; rec.interimResults = false;
+    rec.onresult = e => { const input = e.results[0][0].transcript; el('cmd').value = input; command(input); };
+    rec.onerror = e => { el('reply').textContent = 'Microphone stopped (' + e.error + '). You can type your command.'; };
+    rec.onend = () => { activeRecognition = null; el('mic').textContent = 'Use microphone'; };
+    rec.start(); el('mic').textContent = 'Stop listening'; el('reply').textContent = 'Listening…';
+  } catch { activeRecognition = null; el('reply').textContent = 'Microphone unavailable. Type a command.'; }
+};
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {
+  el('storage').textContent = 'Offline shell unavailable in this browser.';
+});
