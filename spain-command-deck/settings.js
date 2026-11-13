@@ -207,7 +207,7 @@ const speechAudio = new Audio();
 const silentClip = "data:audio/wav;base64,UklGRmQBAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YUABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
 function prepareCommandAudio() {
   silenceVoice();
-  if (!data.kokoroUrl || voiceUnlocked) return;
+  if (!voiceEnabled || !data.kokoroUrl || voiceUnlocked) return;
   speechAudio.src = silentClip;
   speechAudio.play().then(() => { voiceUnlocked = true; }).catch(() => {});
 }
@@ -229,6 +229,7 @@ async function say(message, commandReply=false) {
   silenceVoice();
   const generation=speechGeneration;
   el('reply').textContent=message;
+  if (!voiceEnabled) return;
   if(!data.kokoroUrl) return deviceVoice(message);
   const controller=new AbortController();
   speechRequest=controller;
@@ -302,3 +303,25 @@ function alarmBeat() {
     tone.connect(gain);gain.connect(audioContext.destination);tone.start(start);tone.stop(start+.33);
   });
 }
+
+const voicePreferenceKey = 'spain-spoken-replies';
+let voiceEnabled = true;
+function updateVoiceToggle() {
+  el('spokenReplies').checked = voiceEnabled;
+  el('testVoice').disabled = !voiceEnabled;
+  if (!voiceEnabled) silenceVoice();
+}
+function restoreVoicePreference() {
+  try { voiceEnabled = localStorage.getItem(voicePreferenceKey) !== 'off'; } catch {}
+  updateVoiceToggle();
+}
+el('spokenReplies').onchange = () => {
+  voiceEnabled = el('spokenReplies').checked;
+  try { localStorage.setItem(voicePreferenceKey, voiceEnabled ? 'on' : 'off'); } catch {}
+  updateVoiceToggle();
+};
+restoreVoicePreference();
+window.addEventListener('pageshow', restoreVoicePreference);
+window.addEventListener('storage', event => {
+  if (!event.key || event.key === voicePreferenceKey) restoreVoicePreference();
+});

@@ -481,7 +481,7 @@ body::before{
   <section class="conversation" id="conversation">
     <div class="conversation-header">
       <strong>CONVERSATION<br><span id="projectIndicator" role="status" style="display:block;margin-top:6px;color:#b5cfda;letter-spacing:.04em">General chat</span></strong>
-      <button class="icon-button" id="close-chat" aria-label="Close conversation">×</button>
+      <label style="display:inline-flex;align-items:center;gap:.4em;font-size:12px"><input id="spokenReplies" type="checkbox" checked>Spoken replies</label><button class="icon-button" id="close-chat" aria-label="Close conversation">×</button>
     </div>
     <div id="chat" aria-live="polite"></div>
     <div id="commandVoiceStatus" role="status"></div><button id="playReply" type="button" hidden>Play reply</button>
@@ -598,7 +598,7 @@ function addMessage(role,text){
   return content;
 }
 </script>
-<script src="./conversation.js?v=14"></script>
+<script src="./conversation.js?v=15"></script>
 <script type="module" src="./neural-core.js"></script><section id="development-center" aria-label="SPAIN Development Center">
   <div class="dev-header">
     <div>
