@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SPAIN — Personal Intelligence</title>
+<style>
+:root{
+  --bg:#02060d;
+  --panel:rgba(4,15,27,.94);
+  --line:rgba(67,207,255,.17);
+  --cyan:#65dcff;
+  --text:#e9f7ff;
+  --muted:#7793a7;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:radial-gradient(ellipse at 50% 45%,#071a2b,#02060d 65%);
+  color:var(--text);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  overflow:hidden;
+}
+body::before{
+  content:"";position:fixed;inset:0;pointer-events:none;
+  background-image:
+    linear-gradient(rgba(70,190,255,.018) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(70,190,255,.018) 1px,transparent 1px);
+  background-size:65px 65px;
+  mask-image:radial-gradient(ellipse,#000,transparent 85%);
+}
+.shell{height:100%;position:relative;overflow:hidden}
+.brand{
+  position:absolute;top:32px;left:42px;z-index:5;
+  font-size:20px;font-weight:650;letter-spacing:8px;color:#b8f0ff;
+}
+.brand small{
+  display:block;margin-top:8px;font-size:9px;
+  letter-spacing:3px;color:var(--muted);font-weight:400;
+}
+.connection{
+  position:absolute;top:39px;right:42px;z-index:5;
+  color:#8db5c5;font-size:10px;letter-spacing:2px;
+}
+.connection::before{
+  content:"";display:inline-block;width:5px;height:5px;
+  background:#68edc3;border-radius:50%;margin-right:10px;
+  box-shadow:0 0 9px #68edc3;
+}
+.stage{
+  position:absolute;inset:0;
+  display:flex;align-items:center;justify-content:center;
+  transition:transform .6s ease;
+}
+.stage.shifted{transform:translateX(-19%) scale(.84)}
+#three-container{position:absolute;inset:0;pointer-events:none}
+#three-container canvas{display:block;width:100%;height:100%}
+.core-label{
+  position:absolute;top:calc(50% + 185px);
+  text-align:center;pointer-events:none;
+}
+.core-label strong{
+  font-size:13px;letter-spacing:7px;font-weight:500;color:#b9f4ff;
+}
+.core-label span{
+  display:block;margin-top:13px;
+  color:var(--muted);font-size:10px;letter-spacing:3px;
+}
+.conversation{
+  position:absolute;right:38px;top:110px;bottom:110px;
+  width:min(430px,40vw);z-index:4;
+  display:flex;flex-direction:column;
+  background:rgba(3,12,23,.82);
+  border:1px solid var(--line);
+  backdrop-filter:blur(20px);
+  box-shadow:0 20px 80px rgba(0,0,0,.35);
+  opacity:0;transform:translateX(35px);
+  pointer-events:none;
+  transition:opacity .4s,transform .4s;
+}
+.conversation.open{
+  opacity:1;transform:translateX(0);pointer-events:auto;
+}
+.conversation-header{
+  padding:21px 24px;border-bottom:1px solid var(--line);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.conversation-header strong{
+  font-size:11px;letter-spacing:3px;font-weight:500;color:var(--cyan);
+}
+.icon-button{
+  background:none;border:0;color:#8da9ba;cursor:pointer;
+  font-size:20px;padding:0 4px;
+}
+#chat{
+  flex:1;overflow-y:auto;min-height:0;
+  padding:18px 23px;scroll-behavior:smooth;
+}
+.message{margin-bottom:24px}
+.label{
+  font-size:10px;letter-spacing:2px;color:var(--cyan);
+  margin-bottom:10px;
+}
+.message.user .label{color:#8aa5b8}
+.message.user{padding-left:16%;text-align:right}
+.content{
+  white-space:pre-wrap;overflow-wrap:anywhere;
+  font-size:13px;line-height:1.8;color:#d8eaf3;
+}
+.message.user .content{color:#f1fbff}
+.thinking{
+  font-size:11px;letter-spacing:2px;color:var(--cyan);
+  padding:12px 0;animation:fade 1.1s ease-in-out infinite alternate;
+}
+@keyframes fade{to{opacity:.3}}
+.composer{
+  position:absolute;bottom:38px;left:50%;
+  transform:translateX(-50%);
+  width:min(680px,calc(100% - 50px));z-index:6;
+  display:flex;gap:12px;padding:9px;
+  background:rgba(5,18,31,.94);
+  border:1px solid rgba(101,220,255,.3);
+  box-shadow:0 0 35px rgba(0,140,255,.09);
+  backdrop-filter:blur(15px);
+}
+.composer input{
+  flex:1;min-width:0;border:0;outline:none;
+  background:transparent;color:var(--text);
+  padding:15px;font:14px inherit;
+}
+.composer button{
+  border:0;background:#65dcff;color:#03131e;
+  font-weight:700;padding:0 24px;cursor:pointer;
+}
+.composer button:disabled{opacity:.4}
+.workspace{
+  position:absolute;left:38px;top:110px;bottom:110px;
+  width:310px;z-index:4;
+  background:var(--panel);
+  border:1px solid var(--line);
+  padding:24px;overflow-y:auto;
+  backdrop-filter:blur(20px);
+  opacity:0;transform:translateX(-30px);
+  pointer-events:none;
+  transition:opacity .35s,transform .35s;
+}
+.workspace.open{
+  opacity:1;transform:translateX(0);pointer-events:auto;
+}
+.workspace h2{
+  font-size:11px;letter-spacing:3px;color:var(--cyan);
+  font-weight:500;margin:0 0 24px;
+}
+.workspace h3{
+  font-size:10px;letter-spacing:2px;
+  color:var(--muted);margin:28px 0 12px;
+}
+.workspace pre{
+  white-space:pre-wrap;overflow-wrap:anywhere;
+  font:13px/1.9 inherit;color:#c4dce9;
+}
+.workspace-close{
+  position:absolute;right:16px;top:14px;
+}
+.quick-actions{
+  position:absolute;left:42px;bottom:57px;z-index:6;
+  display:flex;gap:18px;
+}
+.quick-actions button{
+  background:none;border:0;border-bottom:1px solid transparent;
+  color:#7f9cae;font-size:10px;letter-spacing:2px;
+  padding:8px 0;cursor:pointer;
+}
+.quick-actions button:hover{color:var(--cyan);border-color:var(--cyan)}
+#skip{
+  display:none;position:absolute;right:22px;bottom:14px;
+  border:1px solid var(--line);background:#0b2334;
+  color:var(--cyan);font-size:10px;padding:8px;cursor:pointer;
+}
+@media(max-width:950px){
+  .stage.shifted{transform:translateX(-13%) scale(.75)}
+  .conversation{right:14px;width:48vw}
+  .workspace{left:14px;width:240px}
+  .quick-actions{bottom:115px}
+}
+@media(max-width:650px){
+  .brand{top:22px;left:20px}
+  .connection{top:29px;right:20px}
+  .stage{transform:translateY(-12%) scale(.85)}
+  .stage.shifted{transform:translateY(-23%) scale(.65)}
+  .conversation{
+    top:35%;bottom:108px;left:12px;right:12px;width:auto;
+  }
+  .workspace{
+    left:12px;right:12px;top:90px;bottom:110px;width:auto;
+  }
+  .quick-actions{left:20px;bottom:105px}
+  .composer{bottom:16px}
+  .core-label{top:calc(50% + 155px)}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+}
+</style>
+
+<style id="spain-layout-472">
+.stage {
+  transition:transform .55s cubic-bezier(.2,.8,.2,1);
+}
+
+.stage.both-open {
+  transform:scale(.68);
+}
+
+.workspace {
+  width:min(285px,24vw);
+}
+
+.conversation {
+  width:min(410px,34vw);
+}
+
+.quick-actions button {
+  transition:color .2s,border-color .2s;
+}
+
+.quick-actions button:hover {
+  color:#65dcff;
+}
+
+@media(max-width:950px){
+  .stage.both-open {
+    transform:scale(.58);
+  }
+}
+
+@media(max-width:650px){
+  .stage.both-open {
+    transform:translateY(-22%) scale(.48);
+  }
+}
+</style>
+
+<style id="spain-voice-474">
+#mic {
+  width:48px;
+  padding:0;
+  background:rgba(12,50,75,.75);
+  color:#65dcff;
+  border:1px solid rgba(101,220,255,.3);
+  font-size:20px;
+  transition:.2s;
+}
+#mic:hover {
+  background:rgba(30,100,140,.6);
+}
+#mic.listening {
+  background:#65dcff;
+  color:#03131e;
+  box-shadow:0 0 22px rgba(101,220,255,.55);
+  animation:spain-mic-pulse 1s infinite alternate;
+}
+@keyframes spain-mic-pulse {
+  to {box-shadow:0 0 38px rgba(101,220,255,.9)}
+}
+#voice-toggle {
+  position:absolute;
+  right:120px;
+  top:37px;
+  z-index:7;
+  background:none;
+  border:0;
+  color:#8aa9bb;
+  cursor:pointer;
+  font-size:10px;
+  letter-spacing:2px;
+}
+#voice-toggle.active {
+  color:#65dcff;
+}
+@media(prefers-reduced-motion:reduce){
+  #mic.listening{animation:none}
+}
+</style>
+
+<style id="spain-voice-settings-475">
+#voice-settings{
+  display:none;
+  position:fixed;
+  right:38px;
+  top:82px;
+  width:280px;
+  z-index:20;
+  background:rgba(3,14,26,.96);
+  border:1px solid rgba(101,220,255,.3);
+  padding:22px;
+  box-shadow:0 20px 60px rgba(0,0,0,.5);
+  backdrop-filter:blur(18px);
+}
+#voice-settings.open{display:block}
+.voice-heading{
+  font-size:10px;
+  letter-spacing:2px;
+  color:#65dcff;
+  margin-bottom:20px;
+}
+#voice-settings label{
+  display:block;
+  font-size:10px;
+  letter-spacing:1.5px;
+  color:#8daabb;
+  margin:16px 0 9px;
+}
+#voice-select{
+  width:100%;
+  background:#071a2b;
+  color:#e7f8ff;
+  border:1px solid rgba(101,220,255,.25);
+  padding:10px;
+}
+#voice-speed{width:100%;accent-color:#65dcff}
+#test-voice{
+  width:100%;
+  margin-top:18px;
+  padding:12px;
+  background:#65dcff;
+  border:0;
+  color:#03131e;
+  font-weight:700;
+  cursor:pointer;
+}
+</style>
+
+<style id="spain-development-509">
+#development-center {
+  display: none;
+  position: fixed;
+  z-index: 100;
+  top: 7%;
+  right: 3%;
+  width: min(520px, 94vw);
+  height: 82vh;
+  background: rgba(9, 14, 21, .97);
+  border: 1px solid rgba(130, 180, 210, .25);
+  color: #e8f1f5;
+  font-family: inherit;
+  box-shadow: 0 20px 70px rgba(0,0,0,.6);
+  flex-direction: column;
+}
+
+#development-center.open {
+  display: flex;
+}
+
+.dev-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 22px;
+  border-bottom: 1px solid rgba(130,180,210,.2);
+}
+
+.dev-header strong {
+  display: block;
+  letter-spacing: 2px;
+  font-size: 13px;
+}
+
+.dev-header small {
+  display: block;
+  margin-top: 8px;
+  font-size: 9px;
+  opacity: .55;
+  letter-spacing: 1.5px;
+}
+
+#close-development {
+  background: none;
+  color: #e8f1f5;
+  border: 0;
+  font-size: 26px;
+  cursor: pointer;
+}
+
+.dev-tabs {
+  display: flex;
+  border-bottom: 1px solid rgba(130,180,210,.2);
+}
+
+.dev-tab {
+  flex: 1;
+  padding: 16px;
+  border: 0;
+  background: transparent;
+  color: #8197a5;
+  letter-spacing: 1.5px;
+  cursor: pointer;
+}
+
+.dev-tab.active {
+  color: #e8f1f5;
+  border-bottom: 2px solid #8bc8e8;
+}
+
+.dev-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 22px;
+}
+
+.dev-message {
+  border-left: 2px solid #8bc8e8;
+  background: rgba(255,255,255,.035);
+  padding: 16px;
+  margin-bottom: 14px;
+}
+
+.dev-message-meta {
+  font-size: 10px;
+  letter-spacing: 1px;
+  opacity: .55;
+  margin-bottom: 10px;
+}
+
+.dev-message-body {
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.dev-empty {
+  opacity: .55;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+#dev-badge:not(:empty) {
+  display: inline-block;
+  margin-left: 5px;
+  color: #8bc8e8;
+}
+</style>
+
+<style>
+.back{position:absolute;right:18px;top:max(20px,env(safe-area-inset-top));z-index:7;color:var(--cyan);text-decoration:none;padding:9px}
+.connection{right:100px}.quick-actions{bottom:110px}.conversation,.workspace{bottom:158px}
+#commandVoiceStatus,#playReply{margin:0 18px;color:var(--cyan);font-size:12px}
+#playReply{background:var(--panel);border:1px solid var(--line);padding:10px}
+@media(max-width:700px){
+.shell{height:100dvh}.brand{top:max(18px,env(safe-area-inset-top));left:16px}.connection{display:none}
+.quick-actions{left:12px;right:12px;bottom:calc(70px + env(safe-area-inset-bottom));justify-content:space-around;gap:4px}
+.composer{width:calc(100% - 24px);bottom:calc(8px + env(safe-area-inset-bottom));gap:4px}
+.composer input{font-size:16px;padding:10px}.composer button{padding:0 14px}
+.workspace,.conversation{width:auto;left:12px;right:12px;bottom:calc(114px + env(safe-area-inset-bottom));top:min(33dvh,230px)}
+.stage.shifted,.stage.both-open,.stage:has(~ .workspace.open){transform:translateY(-30%) scale(.42)}
+.conversation-header{padding:12px 16px}.conversation:not(.open),.workspace:not(.open){visibility:hidden}
+}
+</style></head>
+<body>
+<div class="shell">
+  <div class="brand">SPAIN<small>PERSONAL INTELLIGENCE</small></div>
+  <a class="back" href="./">‹ Deck</a><span class="connection" id="connection">SPAIN</span>
+
+  <main class="stage" id="stage">
+    <div id="three-container"></div>
+    <div class="core-label">
+      <strong>SPAIN</strong>
+      <span id="mode">READY</span>
+    </div>
+  </main>
+
+  <aside class="workspace" id="workspace">
+    <button class="icon-button workspace-close" id="close-workspace" aria-label="Close workspace">×</button>
+    <h2>WORKSPACE</h2>
+    <h3>PROJECTS</h3>
+    <pre id="projects">Loading...</pre>
+    <h3>TASKS</h3>
+    <pre id="tasks">Loading...</pre>
+  </aside>
+
+  <section class="conversation" id="conversation">
+    <div class="conversation-header">
+      <strong>CONVERSATION</strong>
+      <button class="icon-button" id="close-chat" aria-label="Close conversation">×</button>
+    </div>
+    <div id="chat" aria-live="polite"></div>
+    <div id="commandVoiceStatus" role="status"></div><button id="playReply" type="button" hidden>Play reply</button>
+  </section>
+
+  <div class="quick-actions">
+    <button id="open-chat" type="button">CONVERSATION</button>
+    <button id="open-workspace" type="button">WORKSPACE</button>
+    <button id="open-development" type="button">DEVELOPMENT <span id="dev-badge"></span></button>
+  </div>
+
+  <form class="composer" id="form">
+    <input id="input" autocomplete="off" placeholder="Talk to SPAIN..." required>
+    <button id="mic" type="button" aria-label="Speak to SPAIN">🎙</button>
+    <button id="send">SEND</button>
+  </form>
+</div>
+
+<script>
+const stage=document.getElementById("stage");
+const conversation=document.getElementById("conversation");
+const workspace=document.getElementById("workspace");
+const chat=document.getElementById("chat");
+const input=document.getElementById("input");
+const send=document.getElementById("send");
+const mode=document.getElementById("mode");
+const skip=document.getElementById("skip");
+
+let animation=null;
+let pending=false;
+
+
+const workshopEntry = location.hash === "#workshop";
+function syncStage(){
+  if(matchMedia("(max-width:700px)").matches && workspace.classList.contains("open") && conversation.classList.contains("open")) workspace.classList.remove("open");
+  const chatOpen=conversation.classList.contains("open");
+  const workOpen=workspace.classList.contains("open");
+
+  stage.classList.toggle("shifted",chatOpen && !workOpen);
+  stage.classList.toggle("both-open",chatOpen && workOpen);
+
+  try {
+    if (workshopEntry) return;
+    localStorage.setItem(
+      "spain-layout",
+      JSON.stringify({chatOpen,workOpen})
+    );
+  } catch (_) {}
+}
+
+function toggleChat(){
+  conversation.classList.toggle("open");
+  syncStage();
+}
+
+function toggleWorkspace(){
+  if(matchMedia("(max-width:700px)").matches) conversation.classList.remove("open");
+  workspace.classList.toggle("open");
+  syncStage();
+}
+
+function showChat(){
+  conversation.classList.add("open");
+  syncStage();
+}
+
+function showWorkspace(){
+  workspace.classList.add("open");
+  syncStage();
+}
+
+function closeChat(){
+  conversation.classList.remove("open");
+  syncStage();
+}
+
+function closeWorkspace(){
+  workspace.classList.remove("open");
+  syncStage();
+}
+
+document.getElementById("open-chat").onclick=toggleChat;
+document.getElementById("open-workspace").onclick=toggleWorkspace;
+document.getElementById("close-chat").onclick=closeChat;
+document.getElementById("close-workspace").onclick=closeWorkspace;
+
+try {
+  const saved=JSON.parse(localStorage.getItem("spain-layout")||"{}");
+
+  if(!workshopEntry && saved.chatOpen !== false)conversation.classList.add("open");
+  if(workshopEntry || saved.workOpen)workspace.classList.add("open");
+} catch (_) {}
+
+if(workshopEntry){
+  workspace.classList.add("open");
+  workspace.querySelector("h2").textContent = "WORKSHOP";
+  document.title = "Workshop — SPAIN";
+}
+syncStage();
+
+function scrollBottom(){chat.scrollTop=chat.scrollHeight}
+function addMessage(role,text){
+  const box=document.createElement("div");
+  box.className="message "+role;
+  const label=document.createElement("div");
+  label.className="label";
+  label.textContent=role==="user"?"YOU":"SPAIN";
+  const content=document.createElement("div");
+  content.className="content";
+  content.textContent=text;
+  box.append(label,content);
+  chat.appendChild(box);
+  scrollBottom();
+  return content;
+}
+</script>
+<script src="./conversation.js"></script>
+<script type="module" src="./neural-core.js"></script><section id="development-center" aria-label="SPAIN Development Center">
+  <div class="dev-header">
+    <div>
+      <strong>SPAIN / DEVELOPMENT</strong>
+      <small>AUTONOMOUS IMPROVEMENT COMMUNICATIONS</small>
+    </div>
+    <button id="close-development" type="button">×</button>
+  </div>
+
+  <div class="dev-tabs">
+    <button class="dev-tab active" data-dev-tab="messages">
+      COMMUNICATIONS
+    </button>
+    <button class="dev-tab" data-dev-tab="activity">
+      ACTIVITY
+    </button>
+  </div>
+
+  <div id="dev-messages" class="dev-content"></div>
+
+  <div id="dev-activity" class="dev-content" hidden>
+    <div class="dev-empty">
+      No autonomous experiments have been recorded yet.
+      <br><br>
+      This dashboard will display actual experiment activity
+      once SPAIN's autonomous improvement worker is connected.
+    </div>
+  </div>
+</section>
+
+
+<script id="spain-development-controller-509">
+(() => {
+  const panel = document.getElementById("development-center");
+  const messages = document.getElementById("dev-messages");
+  const badge = document.getElementById("dev-badge");
+
+  async function refreshDevelopment() {
+    try {
+      const [messagesResponse, statusResponse] = await Promise.all([
+        apiFetch("/api/development/messages"),
+        apiFetch("/api/development/status")
+      ]);
+
+      if (!messagesResponse.ok || !statusResponse.ok) {
+        throw new Error("Development API unavailable");
+      }
+
+      const messageData = await messagesResponse.json();
+      const statusData = await statusResponse.json();
+
+      badge.textContent = statusData.unread
+        ? "(" + statusData.unread + ")"
+        : "";
+
+      messages.replaceChildren();
+
+      if (!messageData.messages.length) {
+        const empty = document.createElement("div");
+        empty.className = "dev-empty";
+        empty.textContent = "No development messages yet.";
+        messages.appendChild(empty);
+      }
+
+      for (const item of messageData.messages) {
+        const card = document.createElement("div");
+        card.className = "dev-message";
+
+        const meta = document.createElement("div");
+        meta.className = "dev-message-meta";
+        meta.textContent = item.sender.toUpperCase()
+          + " / " + new Date(item.timestamp).toLocaleString();
+
+        const body = document.createElement("div");
+        body.className = "dev-message-body";
+        body.textContent = item.content;
+
+        card.append(meta, body);
+        messages.appendChild(card);
+      }
+    } catch (error) {
+      messages.textContent="Development messages unavailable. Check the laptop bridge.";
+    }
+  }
+
+  document.getElementById("open-development")
+    .addEventListener("click", async () => {
+      panel.classList.add("open");
+      await refreshDevelopment();
+
+      try {
+        await apiFetch("/api/development/read", {method: "POST"});
+        await refreshDevelopment();
+      } catch (error) {
+        console.warn(error);
+      }
+    });
+
+  document.getElementById("close-development")
+    .addEventListener("click", () => {
+      panel.classList.remove("open");
+    });
+
+  document.querySelectorAll(".dev-tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".dev-tab").forEach(
+        element => element.classList.remove("active")
+      );
+
+      tab.classList.add("active");
+
+      document.getElementById("dev-messages").hidden =
+        tab.dataset.devTab !== "messages";
+
+      document.getElementById("dev-activity").hidden =
+        tab.dataset.devTab !== "activity";
+    });
+  });
+
+
+})();
+</script>
+
+</body>
+</html>

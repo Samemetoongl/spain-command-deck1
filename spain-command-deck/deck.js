@@ -35,6 +35,17 @@ if (!Array.isArray(data.links)) {
 for (const [name,value] of [['SPAIN Settings','settings'],['JARVIS Alarm','alarms']]) {
   if (!data.links.some(i => i.kind === 'internal' && i.value === value)) data.links.push({name,kind:'internal',value});
 }
+// A regular launcher link can be moved, pinned, renamed, or removed.
+if (!data.workshopInstalled) {
+  const workshopUrl = new URL('./spain.html#workshop', location.href).href;
+  if (!data.links.some(item => item.kind === 'web' && item.value === workshopUrl)) {
+    const name = data.links.some(item => item.name.toLowerCase() === 'workshop')
+      ? 'SPAIN Workshop' : 'Workshop';
+    data.links.push({name, kind:'web', value:workshopUrl, folder:''});
+  }
+  data.workshopInstalled = true;
+  save();
+}
 function count() {
   const n = data.tasks.filter(t => !t.done).length;
   el('taskCount').textContent = n + ' open';
@@ -444,4 +455,9 @@ addEventListener('storage', event => {
       updatePowerAge();
     }
   } catch {}
+});
+
+el('coreBtn').addEventListener('click', event => {
+  event.preventDefault();
+  location.assign('./spain.html');
 });
