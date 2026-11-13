@@ -195,7 +195,7 @@ function httpsAddress(raw) {
   if(url.protocol!=='https:' || url.username || url.password || url.search || url.hash) throw Error();
   return url.href;
 }
-for(const id of ['kokoroUrl','nsUrl']) {
+for(const id of ['kokoroUrl','nsUrl','assistantUrl']) {
   el(id).value=data[id] || '';
   el(id).onchange=()=>{
     try { data[id]=httpsAddress(el(id).value.trim()); save(); el(id).setCustomValidity(''); }

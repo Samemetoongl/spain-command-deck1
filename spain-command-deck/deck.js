@@ -359,7 +359,29 @@ function briefing() {
   el('confirm').hidden = true;
   speakBriefing('Morning briefing');
 }
+let chatRequest;
+async function askAssistant(input) {
+  chatRequest?.abort();
+  const request = new AbortController();
+  chatRequest = request;
+  const timer = setTimeout(() => request.abort(), 120000);
+  el('reply').textContent = 'Waiting for SPAIN…';
+  try {
+    const response = await fetch(data.assistantUrl, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({message:input.trim()}), signal:request.signal,
+      credentials:'omit', redirect:'error', cache:'no-store', referrerPolicy:'no-referrer'
+    });
+    if (!response.ok) throw Error();
+    const result = await response.json();
+    if (typeof result.reply !== 'string' || !result.reply.trim()) throw Error();
+    if (request === chatRequest) say(result.reply);
+  } catch {
+    if (request === chatRequest) el('reply').textContent = 'SPAIN did not respond. Check the laptop connection in SPAIN Settings.';
+  } finally { clearTimeout(timer); }
+}
 function command(input) {
+  chatRequest?.abort(); chatRequest = null;
   const phrase = input.trim().toLowerCase().replace(/[.!?]+$/,'');
   el('confirm').hidden = true;
   if (['brief me','briefing','give me a briefing'].includes(phrase)) return briefing();
@@ -375,6 +397,7 @@ function command(input) {
     el('confirm').href = destination(item.kind,item.value); el('confirm').textContent = 'Open ' + item.name;
     el('confirm').hidden = false; el('reply').textContent = 'Tap below to launch.'; return;
   }
+  if (data.assistantUrl) return askAssistant(input);
   el('reply').textContent = 'Try “brief me”, “show agenda”, “show tasks”, or “open” followed by a saved destination.';
 }
 el('commandForm').onsubmit = e => { e.preventDefault(); command(el('cmd').value); };
