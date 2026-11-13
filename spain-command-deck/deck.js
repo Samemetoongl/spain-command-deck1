@@ -375,7 +375,7 @@ async function askAssistant(input) {
     if (!response.ok) throw Error();
     const result = await response.json();
     if (typeof result.reply !== 'string' || !result.reply.trim()) throw Error();
-    if (request === chatRequest) say(result.reply);
+    if (request === chatRequest) say(result.reply, true);
   } catch {
     if (request === chatRequest) el('reply').textContent = 'SPAIN did not respond. Check the laptop connection in SPAIN Settings.';
   } finally { clearTimeout(timer); }
@@ -398,9 +398,9 @@ function command(input) {
     el('confirm').hidden = false; el('reply').textContent = 'Tap below to launch.'; return;
   }
   if (data.assistantUrl) return askAssistant(input);
-  el('reply').textContent = 'Try “brief me”, “show agenda”, “show tasks”, or “open” followed by a saved destination.';
+  el('reply').textContent = 'For chat, enter the private HTTPS chat endpoint in SPAIN Settings. Try “brief me”, “show agenda”, “show tasks”, or “open” followed by a saved destination.';
 }
-el('commandForm').onsubmit = e => { e.preventDefault(); command(el('cmd').value); };
+el('commandForm').onsubmit = e => { e.preventDefault(); prepareCommandAudio(); command(el('cmd').value); };
 
 el('closeConsole').onclick = () => { el('corePanel').open = false; el('coreBtn').focus(); }; el('briefBtn').onclick = briefing;
 const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -411,6 +411,7 @@ el('mic').onclick = () => {
   if (activeRecognition) { activeRecognition.abort(); return; }
   window.speechSynthesis?.cancel(); el('confirm').hidden = true;
   try {
+    prepareCommandAudio();
     const rec = new Recognition(); activeRecognition = rec;
     rec.lang = navigator.language; rec.continuous = false; rec.interimResults = false;
     rec.onresult = e => { const input = e.results[0][0].transcript; el('cmd').value = input; command(input); };
