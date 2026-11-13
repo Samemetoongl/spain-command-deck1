@@ -1,6 +1,6 @@
 const prefix = 'spain-deck:' + self.registration.scope + ':';
-const version = prefix + '13';
-const shell = ['./spain.html','./neural-core.js','./conversation.js','./','./index.html','./deck.css?v=9','./deck.js?v=13','./tasks.js','./settings.js?v=11','./spain3d.js?v=9','./three.core.min.js','./three.module.min.js','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png'];
+const version = prefix + '14';
+const shell = ['./spain.html','./neural-core.js','./conversation.js?v=14','./','./index.html','./deck.css?v=9','./deck.js?v=13','./tasks.js','./settings.js?v=11','./spain3d.js?v=9','./three.core.min.js','./three.module.min.js','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png'];
 const paths = new Set(shell.map(path => new URL(path,self.registration.scope).href));
 self.addEventListener('install',event => {
   event.waitUntil(caches.open(version).then(cache => cache.addAll(shell.map(path => new Request(path, {cache:"reload"})))).then(() => self.skipWaiting()));

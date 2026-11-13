@@ -1,6 +1,21 @@
 const config = JSON.parse(localStorage.getItem('spain-deck-v1') || '{}');
 const el = id => document.getElementById(id);
 const data = config;
+const scopeKey = 'spain-project:' + (config.assistantUrl || '');
+let activeProject;
+try { activeProject = JSON.parse(localStorage.getItem(scopeKey)); } catch {}
+function showScope() {
+  el('projectIndicator').textContent = activeProject ? 'Project · ' + activeProject.name : 'General chat';
+}
+function applyContext(result) {
+  if (!Object.hasOwn(result,'project')) return;
+  activeProject = result.project;
+  localStorage.setItem(scopeKey, JSON.stringify(activeProject));
+  showScope();
+  chat.replaceChildren();
+  for(const [role,text] of result.history || []) addMessage(role,text);
+}
+showScope();
 function apiFetch(path, options = {}) {
   if (!config.assistantUrl) throw Error('Set the chat endpoint in SPAIN Settings.');
   const url = new URL(config.assistantUrl);
@@ -102,10 +117,11 @@ el('form').onsubmit = async event => {
   addMessage('user', message);
   mode.textContent = 'PROCESSING';
   try {
-    const response = await apiFetch('/api/chat', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message}), signal:AbortSignal.timeout(120000)});
+    const response = await apiFetch('/api/chat', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({message, project_id:activeProject?.id}), signal:AbortSignal.timeout(120000)});
     if (!response.ok) throw Error('Chat returned HTTP ' + response.status);
     const result = await response.json();
     if (typeof result.reply !== 'string' || !result.reply.trim()) throw Error('Empty reply');
+    applyContext(result);
     addMessage('assistant', result.reply);
     say(result.reply, true);
     refreshWorkspace(false);
@@ -130,4 +146,22 @@ el('mic').onclick = () => {
   recognition.start();
   el('mic').classList.add('listening');
 };
-refreshWorkspace(true);
+async function restoreChat() {
+  pending = send.disabled = true;
+  try {
+    if (activeProject) {
+      const r = await apiFetch('/api/chat', {method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({message:'Restore project conversation',project_action:'history',project_id:activeProject.id}),signal:AbortSignal.timeout(10000)});
+      if(!r.ok) throw Error();
+      const result = await r.json();
+      if (!Object.hasOwn(result,'project')) throw Error();
+      applyContext(result);
+    }
+  } catch {
+    el('commandVoiceStatus').textContent = 'Could not restore this project history. Check the laptop connection.';
+  } finally {
+    pending = send.disabled = false;
+  }
+  refreshWorkspace(!activeProject);
+}
+restoreChat();

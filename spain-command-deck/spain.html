@@ -480,7 +480,7 @@ body::before{
 
   <section class="conversation" id="conversation">
     <div class="conversation-header">
-      <strong>CONVERSATION</strong>
+      <strong>CONVERSATION<br><span id="projectIndicator" role="status" style="display:block;margin-top:6px;color:#b5cfda;letter-spacing:.04em">General chat</span></strong>
       <button class="icon-button" id="close-chat" aria-label="Close conversation">×</button>
     </div>
     <div id="chat" aria-live="polite"></div>
@@ -598,7 +598,7 @@ function addMessage(role,text){
   return content;
 }
 </script>
-<script src="./conversation.js"></script>
+<script src="./conversation.js?v=14"></script>
 <script type="module" src="./neural-core.js"></script><section id="development-center" aria-label="SPAIN Development Center">
   <div class="dev-header">
     <div>
