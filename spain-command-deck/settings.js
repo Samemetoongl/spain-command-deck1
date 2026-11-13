@@ -217,12 +217,24 @@ async function say(message) {
   speechRequest=controller;
   const timer=setTimeout(()=>controller.abort(),15000);
   try {
+    const started = performance.now();
+    const seconds = ms => (ms / 1000).toFixed(1) + 's';
+    const status = el('voiceStatus');
+    status.textContent = 'Requesting SPAIN audio…';
     const response=await fetch(data.kokoroUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:message}),signal:controller.signal,redirect:'error'});
     if(!response.ok) throw Error();
+    const headersAt = performance.now();
     const blob=await response.blob();
+    const readyAt = performance.now();
     if(generation!==speechGeneration) return;
     speechAudio=new Audio(URL.createObjectURL(blob)); speechAudio.playbackRate=Number(data.speechRate)||1;
-    await speechAudio.play(); el('voiceStatus').textContent = 'Using SPAIN voice.';
+    status.textContent = 'Audio received. Starting playback…';
+    await speechAudio.play();
+    if (generation === speechGeneration) {
+      status.textContent = 'Using SPAIN voice. Response ' + seconds(headersAt - started)
+        + ' · Download ' + seconds(readyAt - headersAt)
+        + ' · Playback start ' + seconds(performance.now() - readyAt);
+    }
   } catch {if(generation===speechGeneration) { el('voiceStatus').textContent='SPAIN voice unreachable. Using the device voice.'; deviceVoice(message); }}
   finally {clearTimeout(timer);}
 }
